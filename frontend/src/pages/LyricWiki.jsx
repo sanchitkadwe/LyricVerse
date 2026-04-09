@@ -106,10 +106,10 @@ export default function LyricWiki() {
           </div>
 
           <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900 tracking-tight mb-6">
-            Cultural <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-violet-500">Lyric Wiki</span>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-violet-500">LyricWiki</span>
           </h1>
           <p className="text-lg text-slate-500 max-w-2xl mb-10">
-            Discover the deep cultural meanings, slang, and idioms behind the lyrics. Created by songwriters, for the world.
+            Discover the cultural meanings, slang behind the lyrics. Created by songwriters, for the world.
           </p>
 
           <div className="w-full max-w-3xl">
