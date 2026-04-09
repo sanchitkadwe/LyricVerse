@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Song, Languages, Genre, LabelSong
+from .models import User, Song, Languages, Genre, LabelSong, Dictionary
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -18,6 +18,14 @@ class GenreSerializer(serializers.ModelSerializer):
     class Meta:
         model = Genre
         fields = ['display_name','name']
+
+
+class DictionarySerializer(serializers.ModelSerializer):
+    language_display = serializers.CharField(source='get_language_display', read_only=True)
+
+    class Meta:
+        model = Dictionary
+        fields = ['id', 'word', 'language', 'language_display', 'meaning']
 
 class SongSerializer(serializers.ModelSerializer):
     author_username = serializers.ReadOnlyField(source='author.username')

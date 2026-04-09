@@ -6,8 +6,8 @@ from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import check_password, make_password
 from django.db.models import Q
-from .models import User, Song, Genre, Languages, LabelSong
-from .serializers import UserSerializer, SongSerializer, GenreSerializer, LanguagesSerializer, LabelSongSerializer, LabelSongDetailSerializer
+from .models import User, Song, Genre, Languages, LabelSong, Dictionary
+from .serializers import UserSerializer, SongSerializer, GenreSerializer, LanguagesSerializer, LabelSongSerializer, LabelSongDetailSerializer, DictionarySerializer
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
@@ -238,6 +238,12 @@ class LanguagesViewSet(viewsets.ModelViewSet):
         queryset = Languages.objects.all()
         serializer_class = LanguagesSerializer
         http_method_names = ['get']
+
+
+class DictionaryViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = Dictionary.objects.all().order_by('word')
+    serializer_class = DictionarySerializer
+    http_method_names = ['get']
 
 
 class LabelSongViewSet(viewsets.ReadOnlyModelViewSet):

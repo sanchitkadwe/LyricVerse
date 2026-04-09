@@ -129,36 +129,25 @@ class LabelSong(models.Model):
     
     
 
-class Word(models.Model):
-    text = models.CharField(max_length=255)
+class Dictionary(models.Model):
+
+    word = models.CharField(max_length=25, unique=True)
     language = models.CharField(
-        max_length=10,
         choices=Languages.LANGUAGE_CHOICES
     )
+    meaning = models.TextField(max_length=50)
 
     def __str__(self):
-        return f"{self.text} ({self.get_language_display()})"
+        return f"{self.word} ({self.get_language_display()})"
+    
 
-    class Meta:
-        unique_together = ('text', 'language')
-
-
-class Translation(models.Model):
-    source_word = models.ForeignKey(
-        Word,
-        on_delete=models.CASCADE,
-        related_name='translations'
-    )
-
-    translated_text = models.CharField(max_length=255)
-
-    target_language = models.CharField(
-        max_length=10,
-        choices=Languages.LANGUAGE_CHOICES
-    )
-
+class TranslatedLyrics(models.Model):
+    song = models.ForeignKey(Song, on_delete=models.CASCADE, related_name='lyrics')
+    english_lyrics= models.TextField()
+    hindi_lyrics = models.TextField()
+    marathi_lyrics = models.TextField()
+    tamil_lyrics = models.TextField()
+    bengali_lyrics = models.TextField()
     def __str__(self):
-        return f"{self.source_word.text} → {self.translated_text} ({self.get_target_language_display()})"
+        return f"{self.song.title} - Translated Lyrics"
 
-    class Meta:
-        unique_together = ('source_word', 'target_language')

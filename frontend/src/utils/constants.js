@@ -14,6 +14,7 @@ export const API_ENDPOINTS = {
     SONG_FINAL_PUBLISH: (songId) => `/song/${songId}/final_publish/`,
     LANGUAGES: '/languages/',
     GENRES: '/genre/',
+    DICTIONARY: '/dictionary/',
 };
 
 export const ROLES = {

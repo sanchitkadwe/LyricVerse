@@ -1,5 +1,5 @@
 from django.contrib import admin
-from api.models import Song, User, LabelSong, Genre, Languages
+from api.models import Song, User, LabelSong, Genre, Languages, Dictionary, TranslatedLyrics
 
 
 # Register your models here.
@@ -8,3 +8,5 @@ admin.site.register(Song)
 admin.site.register(LabelSong)
 admin.site.register(Genre)
 admin.site.register(Languages)
+admin.site.register(Dictionary)
+admin.site.register(TranslatedLyrics)
