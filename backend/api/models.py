@@ -99,6 +99,7 @@ class Song(models.Model):
     original_lyrics = models.TextField(blank=True)
     likes =  models.IntegerField(default=0)
     audio_file = models.FileField(upload_to='audio/', blank=True, null=True)
+    tts_audio_file = models.FileField(upload_to='tts/', blank=True, null=True)
     created_at = models.DateTimeField(auto_now_add=True)
     status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='DRAFT')
 
@@ -125,6 +126,7 @@ class LabelSong(models.Model):
     # One simple text field for the official lyrics. No line-by-line database rows needed!
     likes =  models.IntegerField(default=0)
     audio_file = models.FileField(upload_to='audio/', blank=True, null=True)
+    tts_audio_file = models.FileField(upload_to='tts/', blank=True, null=True)
     official_lyrics = models.TextField() 
     created_at = models.DateTimeField(auto_now_add=True)
 

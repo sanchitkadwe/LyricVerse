@@ -15,6 +15,8 @@ export const API_ENDPOINTS = {
     SONG_FINAL_PUBLISH: (songId) => `/song/${songId}/final_publish/`,
     SONG_FAVORITE: (songId) => `/song/${songId}/favorite/`,
     SONG_LIKE: (songId) => `/song/${songId}/like/`,
+    SONG_TRANSLATE: (songId) => `/song/${songId}/translate/`,
+    SONG_TRANSLATE_PREVIEW: '/song/translate-preview/',
     LABEL_SONG_FAVORITE: (songId) => `/label-songs/${songId}/favorite/`,
     LABEL_SONG_LIKE: (songId) => `/label-songs/${songId}/like/`,
     LANGUAGES: '/languages/',

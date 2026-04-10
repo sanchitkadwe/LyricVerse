@@ -50,6 +50,8 @@ export default function SongDetail() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [likeLoading, setLikeLoading] = useState(false);
+  const [translationsByLanguage, setTranslationsByLanguage] = useState({});
+  const [translationLoadingLang, setTranslationLoadingLang] = useState('');
 
   useEffect(() => {
     const fetchSong = async () => {
@@ -107,6 +109,10 @@ export default function SongDetail() {
 
   const lyricsData = useMemo(() => {
     const rawLyrics = normalizedSong?.original_lyrics || normalizedSong?.official_lyrics || '';
+    const activeTranslationLines =
+      activeLang !== 'original' && translationsByLanguage[activeLang]
+        ? translationsByLanguage[activeLang].split('\n').map((line) => line.trim())
+        : [];
 
     return rawLyrics
       .split('\n')
@@ -116,8 +122,9 @@ export default function SongDetail() {
         id: index + 1,
         original: line,
         translations: {},
+        activeTranslation: activeTranslationLines[index] || '',
       }));
-  }, [normalizedSong]);
+  }, [activeLang, normalizedSong, translationsByLanguage]);
 
   const languages = useMemo(() => {
     const originalLanguageCode = normalizedSong?.original_language;
@@ -153,7 +160,7 @@ export default function SongDetail() {
       activeLang === 'original'
         ? lyricsData.map((line) => line.original).join('. ')
         : lyricsData
-            .map((line) => line.translations[activeLang] || line.original)
+            .map((line) => line.activeTranslation || line.original)
             .join('. ');
 
     if (!textToRead.trim()) {
@@ -255,6 +262,52 @@ export default function SongDetail() {
       console.error('Like update failed:', error);
     } finally {
       setLikeLoading(false);
+    }
+  };
+
+  const handleTranslate = async (languageCode = activeLang) => {
+    if (isLabelSong || languageCode === 'original') {
+      return;
+    }
+
+    if (translationsByLanguage[languageCode]?.trim()) {
+      setActiveLang(languageCode);
+      return;
+    }
+
+    try {
+      setTranslationLoadingLang(languageCode);
+      const response = await fetch(`${BASE_URL}${API_ENDPOINTS.SONG_TRANSLATE(id)}`, {
+        method: 'POST',
+        credentials: 'include',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          target_language: languageCode,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data?.error || 'Unable to translate this song right now.');
+      }
+
+      setTranslationsByLanguage((current) => ({
+        ...current,
+        [languageCode]: data.translated_lyrics || '',
+      }));
+      setActiveLang(languageCode);
+    } catch (error) {
+      console.error('Translation request failed:', error);
+      addToast({
+        type: 'error',
+        title: 'Translation failed',
+        description: error.message || 'We could not translate this song right now.',
+      });
+    } finally {
+      setTranslationLoadingLang('');
     }
   };
 
@@ -414,7 +467,19 @@ export default function SongDetail() {
                   {languages.map((lang) => (
                     <button
                       key={lang.code}
-                      onClick={() => setActiveLang(lang.code)}
+                      onClick={() => {
+                        if (lang.code === 'original' || isLabelSong) {
+                          setActiveLang(lang.code);
+                          return;
+                        }
+
+                        if (translationsByLanguage[lang.code]?.trim()) {
+                          setActiveLang(lang.code);
+                          return;
+                        }
+
+                        handleTranslate(lang.code);
+                      }}
                       className={`px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all ${
                         activeLang === lang.code
                           ? 'bg-slate-900 text-white shadow-md'
@@ -440,16 +505,37 @@ export default function SongDetail() {
             </div>
 
             <div className="bg-white/50 backdrop-blur-sm border border-slate-200/60 rounded-[2rem] p-6 sm:p-10 shadow-sm min-h-[400px]">
-              {activeLang !== 'original' && lyricsData.length > 0 && !lyricsData.some((line) => line.translations[activeLang]) ? (
+              {activeLang !== 'original' && !translationsByLanguage[activeLang] ? (
                 <div className="flex flex-col items-center justify-center h-full py-20 text-center">
                   <div className="w-20 h-20 bg-indigo-50 rounded-full flex items-center justify-center mb-6 border-4 border-white shadow-sm">
                     <Globe2 size={32} className="text-indigo-400" />
                   </div>
-                  <h3 className="text-xl font-extrabold text-slate-900 mb-2">No Translations Yet</h3>
+                  <h3 className="text-xl font-extrabold text-slate-900 mb-2">
+                    {isLabelSong
+                      ? 'Translation unavailable here'
+                      : translationLoadingLang === activeLang
+                        ? 'Translating...'
+                        : 'No Translation Yet'}
+                  </h3>
                   <p className="text-slate-500 max-w-md mb-6 leading-relaxed">
-                    This song hasn&apos;t been translated into this language yet. Break the language barrier and be the first to contribute!
+                    {isLabelSong
+                      ? 'This page currently shows the original label lyrics only.'
+                      : translationLoadingLang === activeLang
+                      ? 'Fetching a saved translation or generating a new one from the backend.'
+                      : lyricsData.length === 0
+                      ? 'Original lyrics are not shown here yet, but you can still try generating and saving a translation for this language.'
+                      : 'Click translate to fetch an existing saved version or create one for this song.'}
                   </p>
-                  <AnimatedTranslateButton label={`Translate to ${languages.find((lang) => lang.code === activeLang)?.label || 'this language'}`} />
+                  {!isLabelSong && (
+                    <AnimatedTranslateButton
+                      label={
+                        translationLoadingLang === activeLang
+                          ? 'Translating...'
+                          : `Translate to ${languages.find((lang) => lang.code === activeLang)?.label || 'this language'}`
+                      }
+                      onClick={() => handleTranslate(activeLang)}
+                    />
+                  )}
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -461,7 +547,7 @@ export default function SongDetail() {
                   )}
 
                   {lyricsData.map((line) => {
-                    const hasTranslation = activeLang !== 'original' && line.translations[activeLang];
+                    const hasTranslation = activeLang !== 'original' && line.activeTranslation;
 
                     return (
                       <div key={line.id} className="group relative flex items-start gap-3 px-2 py-3 sm:px-3 sm:py-3 rounded-xl hover:bg-white/90 transition-colors cursor-text">
@@ -481,11 +567,14 @@ export default function SongDetail() {
                               </p>
                               {hasTranslation ? (
                                 <p className="text-lg sm:text-xl font-semibold text-indigo-950 leading-relaxed">
-                                  {line.translations[activeLang]}
+                                  {line.activeTranslation}
                                 </p>
                               ) : (
                                 <div className="mt-2">
-                                  <AnimatedTranslateButton label="Create translation" />
+                                  <AnimatedTranslateButton
+                                    label={translationLoadingLang === activeLang ? 'Translating...' : 'Create translation'}
+                                    onClick={() => handleTranslate(activeLang)}
+                                  />
                                 </div>
                               )}
                             </div>

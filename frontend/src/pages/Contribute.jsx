@@ -82,6 +82,7 @@ export default function Contribute() {
   const [lastSavedAt, setLastSavedAt] = useState('');
   const [initialVersion, setInitialVersion] = useState(null);
   const [savedVersions, setSavedVersions] = useState([]);
+  const [translatedText, setTranslatedText] = useState('');
 
   const statusMeta = STATUS_COPY[songStatus] || STATUS_COPY.DRAFT;
   const isPublished = songStatus === 'PUBLISHED';
@@ -171,11 +172,32 @@ export default function Contribute() {
     fetchBootstrapData();
   }, [navigate, requestedSongId]);
 
+  useEffect(() => {
+    if (targetLang !== formData.original_language) {
+      return;
+    }
+
+    const nextTargetLanguage = languageOptions.find(
+      (language) => language.code !== formData.original_language,
+    )?.code;
+
+    if (nextTargetLanguage) {
+      setTargetLang(nextTargetLanguage);
+    }
+  }, [formData.original_language, languageOptions, targetLang]);
+
   const updateFormValue = (field, value) => {
     setFormData((current) => ({
       ...current,
       [field]: value,
     }));
+
+    if (field === 'original_lyrics') {
+      setTranslatedText('');
+    }
+    if (field === 'original_language') {
+      setTranslatedText('');
+    }
   };
 
   const persistVersionSnapshot = (song, label) => {
@@ -321,30 +343,50 @@ export default function Contribute() {
       return;
     }
 
-    setIsTranslating(true);
-    window.setTimeout(() => {
+    if (targetLang === formData.original_language) {
+      addToast({
+        type: 'info',
+        title: 'Choose another language',
+        description: 'The output language should be different from the original language.',
+      });
+      return;
+    }
+
+    try {
+      setIsTranslating(true);
+      const response = await axios.post(
+        `${BASE_URL}${API_ENDPOINTS.SONG_TRANSLATE_PREVIEW}`,
+        {
+          lyrics: formData.original_lyrics,
+          source_language: formData.original_language,
+          target_language: targetLang,
+        },
+        {
+          withCredentials: true,
+        },
+      );
+
+      setTranslatedText(response.data?.translated_lyrics || '');
+    } catch (error) {
+      console.error('Failed to translate preview:', error);
+      setTranslatedText('');
+      addToast({
+        type: 'error',
+        title: 'Translation failed',
+        description:
+          error.response?.data?.error ||
+          'We could not translate the current lyrics right now.',
+      });
+    } finally {
       setIsTranslating(false);
-    }, 700);
+    }
   };
 
   const currentLanguageLabel = useMemo(() => {
     return languageOptions.find((language) => language.code === formData.original_language)?.label || formData.original_language;
   }, [formData.original_language, languageOptions]);
 
-  const translatedPreview = useMemo(() => {
-    if (!formData.original_lyrics.trim()) {
-      return '';
-    }
-
-    const targetLabel = languageOptions.find((language) => language.code === targetLang)?.label || targetLang;
-
-    return formData.original_lyrics
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line, index) => `${index + 1}. [${targetLabel}] ${line}`)
-      .join('\n');
-  }, [formData.original_lyrics, languageOptions, targetLang]);
+  const translatedPreview = useMemo(() => translatedText, [translatedText]);
 
   const currentVersionPreview = useMemo(() => {
     return {
@@ -603,7 +645,10 @@ export default function Contribute() {
                     </div>
                     <select
                       value={targetLang}
-                      onChange={(event) => setTargetLang(event.target.value)}
+                      onChange={(event) => {
+                        setTargetLang(event.target.value);
+                        setTranslatedText('');
+                      }}
                       className="text-sm bg-slate-100 border-none rounded-lg px-3 py-1.5 font-semibold text-slate-700 focus:ring-2 focus:ring-indigo-600/20 outline-none cursor-pointer"
                     >
                       {languageOptions
@@ -619,13 +664,17 @@ export default function Contribute() {
                   <div className="flex-grow bg-slate-50 border border-slate-200/60 rounded-xl p-4 text-slate-600 text-sm leading-relaxed overflow-y-auto whitespace-pre-wrap">
                     {!formData.original_lyrics.trim() ? (
                       <p className="italic text-slate-400 text-center mt-10">
-                        Add lyrics in the editor to generate a structured translation preview.
+                        Add lyrics in the editor, then click translate to see the current output here.
                       </p>
                     ) : isTranslating ? (
                       <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-3">
                         <LoaderCircle size={28} className="animate-spin" />
-                        <p className="text-sm font-medium">Refreshing the translation workspace...</p>
+                        <p className="text-sm font-medium">Translating your current lyrics...</p>
                       </div>
+                    ) : !translatedPreview ? (
+                      <p className="italic text-slate-400 text-center mt-10">
+                        Click translate to generate the latest preview in the selected language.
+                      </p>
                     ) : (
                       translatedPreview
                     )}

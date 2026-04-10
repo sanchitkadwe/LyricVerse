@@ -8,10 +8,11 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.db.models import Prefetch, Q
 from django.db.models import F
 from django.utils import timezone
-from .models import User, Song, Genre, Languages, LabelSong, Dictionary, AnnotationRequest, FavoriteSong
+from .models import User, Song, Genre, Languages, LabelSong, Dictionary, AnnotationRequest, FavoriteSong, TranslatedLyrics
 from .serializers import UserSerializer, SongSerializer, GenreSerializer, LanguagesSerializer, LabelSongSerializer, LabelSongDetailSerializer, DictionarySerializer, AnnotationRequestSerializer, FavoriteSongSerializer
 from django.utils import timezone
 from django.utils import timezone
+from .translation_utils import get_translation_field_name, normalize_language_code, normalize_language_name, translate_lyrics_text
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
@@ -180,6 +181,133 @@ class SongViewSet(viewsets.ModelViewSet):
 
         serializer.save()
 
+    def _get_or_create_translation_record(self, song):
+        translated_lyrics = song.lyrics.first()
+        if translated_lyrics:
+            return translated_lyrics
+        return TranslatedLyrics.objects.create(
+            song=song,
+            english_lyrics='',
+            hindi_lyrics='',
+            marathi_lyrics='',
+            tamil_lyrics='',
+            bengali_lyrics='',
+        )
+
+    def _build_translation_payload(self, song, target_language_code, translated_lyrics_text, cached=False):
+        translation_record = song.lyrics.first()
+        saved_translations = {
+            'english_lyrics': translation_record.english_lyrics if translation_record else '',
+            'hindi_lyrics': translation_record.hindi_lyrics if translation_record else '',
+            'marathi_lyrics': translation_record.marathi_lyrics if translation_record else '',
+            'tamil_lyrics': translation_record.tamil_lyrics if translation_record else '',
+            'bengali_lyrics': translation_record.bengali_lyrics if translation_record else '',
+        }
+        return {
+            'song_id': song.id,
+            'source_language': normalize_language_name(song.original_language),
+            'source_language_code': normalize_language_code(song.original_language),
+            'target_language': normalize_language_name(target_language_code),
+            'target_language_code': normalize_language_code(target_language_code),
+            'translated_lyrics': translated_lyrics_text,
+            'cached': cached,
+            'saved_translations': saved_translations,
+        }
+
+    @action(detail=False, methods=['post'], permission_classes=[AllowAny], url_path='translate-preview')
+    def translate_preview(self, request):
+        lyrics = request.data.get('lyrics', '')
+        source_language = request.data.get('source_language') or request.data.get('input_language')
+        target_language = request.data.get('target_language') or request.data.get('output_language')
+
+        if not str(lyrics).strip():
+            return Response(
+                {'error': 'lyrics are required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not source_language:
+            return Response(
+                {'error': 'source_language is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if not target_language:
+            return Response(
+                {'error': 'target_language is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            translated_data = translate_lyrics_text(
+                lyrics=lyrics,
+                source_language=source_language,
+                target_language=target_language,
+            )
+            return Response(translated_data, status=status.HTTP_200_OK)
+        except ValueError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
+    @action(detail=True, methods=['post'], permission_classes=[AllowAny], url_path='translate')
+    def translate(self, request, pk=None):
+        song = self.get_object()
+        target_language = request.data.get('target_language') or request.data.get('output_language')
+
+        if not target_language:
+            return Response(
+                {'error': 'target_language is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        field_name = get_translation_field_name(target_language)
+        if field_name is None:
+            return Response(
+                {'error': 'Unsupported target language.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        existing_translation = song.lyrics.first()
+        cached_translation = getattr(existing_translation, field_name, '').strip() if existing_translation else ''
+        if cached_translation:
+            return Response(
+                self._build_translation_payload(song, target_language, cached_translation, cached=True),
+                status=status.HTTP_200_OK,
+            )
+
+        lyrics = song.original_lyrics
+        if not str(lyrics).strip():
+            return Response(
+                {'error': 'No lyrics available for translation.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            translated_data = translate_lyrics_text(
+                lyrics=lyrics,
+                source_language=song.original_language,
+                target_language=target_language,
+            )
+
+            translation_record = self._get_or_create_translation_record(song)
+            setattr(translation_record, field_name, translated_data['translated_lyrics'])
+            translation_record.save(update_fields=[field_name])
+
+            return Response(
+                self._build_translation_payload(
+                    song,
+                    translated_data['target_language_code'],
+                    translated_data['translated_lyrics'],
+                    cached=False,
+                ),
+                status=status.HTTP_200_OK,
+            )
+        except ValueError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
     @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
     def mine(self, request):
         user_songs = Song.objects.filter(author=request.user).order_by('-created_at')
@@ -267,11 +395,55 @@ class SongViewSet(viewsets.ModelViewSet):
         return Response({'likes': song.likes}, status=status.HTTP_200_OK)
     
 
+    @action(detail=True, methods=['post'], permission_classes=[AllowAny])
+    def speech(self, request, pk=None):
+        song = self.get_object()
+        
+        if song.tts_audio_file:
+            request_url = request.build_absolute_uri(song.tts_audio_file.url)
+            return Response({'audio_url': request_url}, status=status.HTTP_200_OK)
+            
+        text = song.original_lyrics
+        if not text:
+            return Response({'error': 'No lyrics available for speech.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            from .tts_utils import generate_tts_audio
+            audio_file = generate_tts_audio(text)
+            song.tts_audio_file.save(f"song_{song.id}_tts.wav", audio_file)
+            song.save()
+            request_url = request.build_absolute_uri(song.tts_audio_file.url)
+            return Response({'audio_url': request_url}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
 
 class GenreViewSet(viewsets.ModelViewSet):
-        queryset = Genre.objects.all()
-        serializer_class = GenreSerializer
-        http_method_names = ['get']
+    queryset = Genre.objects.all()
+    serializer_class = GenreSerializer
+    http_method_names = ['get']
+
+    @action(detail=True, methods=['post'], permission_classes=[AllowAny])
+    def speech(self, request, pk=None):
+        label_song = self.get_object()
+        
+        if label_song.tts_audio_file:
+            request_url = request.build_absolute_uri(label_song.tts_audio_file.url)
+            return Response({'audio_url': request_url}, status=status.HTTP_200_OK)
+            
+        text = label_song.official_lyrics
+        if not text:
+            return Response({'error': 'No lyrics available for speech.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            from .tts_utils import generate_tts_audio
+            audio_file = generate_tts_audio(text)
+            label_song.tts_audio_file.save(f"labelsong_{label_song.id}_tts.wav", audio_file)
+            label_song.save()
+            request_url = request.build_absolute_uri(label_song.tts_audio_file.url)
+            return Response({'audio_url': request_url}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 class LanguagesViewSet(viewsets.ModelViewSet):
         queryset = Languages.objects.all()

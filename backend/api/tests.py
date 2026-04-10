@@ -2,8 +2,9 @@ from django.contrib.auth import get_user_model
 from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
+from unittest.mock import patch
 
-from .models import LabelSong, Song
+from .models import LabelSong, Song, TranslatedLyrics
 
 
 User = get_user_model()
@@ -80,6 +81,71 @@ class SongWorkflowTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         song.refresh_from_db()
         self.assertEqual(song.title, "Midnight Rain")
+
+    @patch("api.views.translate_lyrics_text")
+    def test_translate_preview_returns_translated_lyrics(self, mock_translate):
+        mock_translate.return_value = {
+            "source_language": "English",
+            "target_language": "Hindi",
+            "source_language_code": "en",
+            "target_language_code": "hi",
+            "translated_lyrics": "बारिश में चलते हुए",
+        }
+
+        response = self.client.post(
+            reverse("song-translate-preview"),
+            {
+                "lyrics": "Walking through the rain",
+                "source_language": "en",
+                "target_language": "hi",
+            },
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["translated_lyrics"], "बारिश में चलते हुए")
+
+    @patch("api.views.translate_lyrics_text")
+    def test_translate_song_saves_and_returns_cached_translation(self, mock_translate):
+        song = self.create_song(status_value="PUBLISHED")
+        mock_translate.return_value = {
+            "source_language": "English",
+            "target_language": "Marathi",
+            "source_language_code": "en",
+            "target_language_code": "mr",
+            "translated_lyrics": "मध्यरात्रीच्या पावसात चालत आहे",
+        }
+
+        first_response = self.client.post(
+            reverse("song-translate", args=[song.id]),
+            {"target_language": "mr"},
+            format="json",
+        )
+
+        self.assertEqual(first_response.status_code, status.HTTP_200_OK)
+        self.assertFalse(first_response.data["cached"])
+
+        translation_record = TranslatedLyrics.objects.get(song=song)
+        self.assertEqual(
+            translation_record.marathi_lyrics,
+            "मध्यरात्रीच्या पावसात चालत आहे",
+        )
+
+        mock_translate.reset_mock()
+
+        second_response = self.client.post(
+            reverse("song-translate", args=[song.id]),
+            {"target_language": "mr"},
+            format="json",
+        )
+
+        self.assertEqual(second_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(second_response.data["cached"])
+        self.assertEqual(
+            second_response.data["translated_lyrics"],
+            "मध्यरात्रीच्या पावसात चालत आहे",
+        )
+        mock_translate.assert_not_called()
 
 
 class FavoriteSongTests(APITestCase):

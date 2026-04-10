@@ -17,8 +17,15 @@ from dotenv import load_dotenv
 from datetime import timedelta
 
 
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+
+
+
+MEDIA_URL = '/media/'
+MEDIA_ROOT = os.path.join(BASE_DIR, 'media')
+
 
 # The .env file is right inside the backend folder
 env_path = BASE_DIR / '.env'
@@ -165,3 +172,7 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=30),
     # ... rest of your settings ...
 }
+
+OLLAMA_TRANSLATION_URL = os.getenv('OLLAMA_TRANSLATION_URL', 'http://10.129.131.171:7000/translate')
+OLLAMA_TRANSLATION_PATH = os.getenv('OLLAMA_TRANSLATION_PATH', '')
+OLLAMA_TRANSLATION_TIMEOUT = int(os.getenv('OLLAMA_TRANSLATION_TIMEOUT', '90'))
