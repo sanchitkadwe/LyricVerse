@@ -266,6 +266,29 @@ class SongViewSet(viewsets.ModelViewSet):
         song.refresh_from_db(fields=['likes'])
         return Response({'likes': song.likes}, status=status.HTTP_200_OK)
     
+    @action(detail=True, methods=['post'], permission_classes=[AllowAny])
+    def speech(self, request, pk=None):
+        song = self.get_object()
+        
+        if song.tts_audio_file:
+            request_url = request.build_absolute_uri(song.tts_audio_file.url)
+            return Response({'audio_url': request_url}, status=status.HTTP_200_OK)
+            
+        text = song.original_lyrics
+        if not text:
+            return Response({'error': 'No lyrics available for speech.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            from .tts_utils import generate_tts_audio
+            audio_file = generate_tts_audio(text)
+            song.tts_audio_file.save(f"song_{song.id}_tts.wav", audio_file)
+            song.save()
+            request_url = request.build_absolute_uri(song.tts_audio_file.url)
+            return Response({'audio_url': request_url}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    
 
 
 class GenreViewSet(viewsets.ModelViewSet):
@@ -326,6 +349,28 @@ class LabelSongViewSet(viewsets.ReadOnlyModelViewSet):
         LabelSong.objects.filter(pk=label_song.pk).update(likes=F('likes') + 1)
         label_song.refresh_from_db(fields=['likes'])
         return Response({'likes': label_song.likes}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], permission_classes=[AllowAny])
+    def speech(self, request, pk=None):
+        label_song = self.get_object()
+        
+        if label_song.tts_audio_file:
+            request_url = request.build_absolute_uri(label_song.tts_audio_file.url)
+            return Response({'audio_url': request_url}, status=status.HTTP_200_OK)
+            
+        text = label_song.official_lyrics
+        if not text:
+            return Response({'error': 'No lyrics available for speech.'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        try:
+            from .tts_utils import generate_tts_audio
+            audio_file = generate_tts_audio(text)
+            label_song.tts_audio_file.save(f"labelsong_{label_song.id}_tts.wav", audio_file)
+            label_song.save()
+            request_url = request.build_absolute_uri(label_song.tts_audio_file.url)
+            return Response({'audio_url': request_url}, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
 class AnnotationRequestViewSet(viewsets.ModelViewSet):

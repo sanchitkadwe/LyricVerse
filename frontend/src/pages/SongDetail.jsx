@@ -50,6 +50,8 @@ export default function SongDetail() {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [favoriteLoading, setFavoriteLoading] = useState(false);
   const [likeLoading, setLikeLoading] = useState(false);
+  const [loadingTTS, setLoadingTTS] = useState(false);
+  const [audioStreamObj, setAudioStreamObj] = useState(null);
 
   useEffect(() => {
     const fetchSong = async () => {
@@ -149,51 +151,85 @@ export default function SongDetail() {
   };
 
   const handleReadAloud = async () => {
-    const textToRead =
-      activeLang === 'original'
-        ? lyricsData.map((line) => line.original).join('. ')
-        : lyricsData
-            .map((line) => line.translations[activeLang] || line.original)
-            .join('. ');
-
-    if (!textToRead.trim()) {
-      return;
-    }
-
-    if (isSpeaking) {
+    // Handling Stop Request
+    if (isSpeaking || loadingTTS) {
+      if (audioStreamObj) {
+        audioStreamObj.pause();
+        audioStreamObj.currentTime = 0;
+        setAudioStreamObj(null);
+      }
       window.speechSynthesis?.cancel();
       setIsSpeaking(false);
+      setLoadingTTS(false);
       return;
     }
 
-    // Placeholder for future backend TTS integration.
-    // Example:
-    // const response = await fetch(`${BASE_URL}/song/${id}/speech/`, {
-    //   method: 'POST',
-    //   credentials: 'include',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({
-    //     language: activeLang,
-    //     text: textToRead,
-    //   }),
-    // });
-    // const data = await response.json();
-    // Then play the returned audio URL/blob here.
+    if (activeLang !== 'original') {
+      // Fallback to Native SpeechSynthesis for translated versions
+      const textToRead = lyricsData
+        .map((line) => line.translations[activeLang] || line.original)
+        .join('. ');
 
-    if (!window.speechSynthesis) {
+      if (!textToRead.trim()) return;
+
+      const utterance = new SpeechSynthesisUtterance(textToRead);
+      utterance.lang = activeLang;
+      utterance.rate = 0.92;
+      utterance.pitch = 1;
+      utterance.onend = () => setIsSpeaking(false);
+      utterance.onerror = () => setIsSpeaking(false);
+
+      window.speechSynthesis.cancel();
+      setIsSpeaking(true);
+      window.speechSynthesis.speak(utterance);
       return;
     }
 
-    const utterance = new SpeechSynthesisUtterance(textToRead);
-    utterance.lang = activeLang === 'original' ? normalizedSong.original_language || 'en' : activeLang;
-    utterance.rate = 0.92;
-    utterance.pitch = 1;
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => setIsSpeaking(false);
+    // Connect to Deep Learning Indic-Parler-TTS model for original lyrics
+    try {
+      setLoadingTTS(true);
+      
+      const endpoint = isLabelSong
+        ? `/label-songs/${id}/speech/`
+        : `/song/${id}/speech/`;
 
-    window.speechSynthesis.cancel();
-    setIsSpeaking(true);
-    window.speechSynthesis.speak(utterance);
+      const response = await fetch(`${BASE_URL}${endpoint}`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('TTS Model couldn\'t generate audio right now.');
+      }
+
+      const data = await response.json();
+
+      if (data.audio_url) {
+        const audio = new Audio(data.audio_url);
+        
+        audio.onended = () => {
+          setIsSpeaking(false);
+          setAudioStreamObj(null);
+        };
+        audio.onerror = () => {
+          setIsSpeaking(false);
+          setAudioStreamObj(null);
+          addToast({ title: 'Error', description: 'Could not play generated audio format.'});
+        };
+
+        setAudioStreamObj(audio);
+        setIsSpeaking(true);
+        audio.play();
+      } else {
+         throw new Error('Missing audio URL from model response.');
+      }
+
+    } catch (e) {
+      addToast({ title: 'Error', description: e.message || 'Error executing ML Inference.' });
+      setIsSpeaking(false);
+    } finally {
+      setLoadingTTS(false);
+    }
   };
 
   const handleFavoriteToggle = async () => {
@@ -261,8 +297,12 @@ export default function SongDetail() {
   useEffect(() => {
     return () => {
       window.speechSynthesis?.cancel();
+      if (audioStreamObj) {
+        audioStreamObj.pause();
+        audioStreamObj.currentTime = 0;
+      }
     };
-  }, []);
+  }, [audioStreamObj]);
 
   if (loading) {
     return (
@@ -427,14 +467,21 @@ export default function SongDetail() {
                 </div>
                 <button
                   onClick={handleReadAloud}
+                  disabled={loadingTTS}
                   className={`inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-2 text-sm font-bold transition-all ${
-                    isSpeaking
+                    (isSpeaking || loadingTTS)
                       ? 'border-red-200 bg-red-50 text-red-600 hover:bg-red-100'
                       : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-200 hover:bg-indigo-50 hover:text-indigo-700'
-                  }`}
+                  } ${loadingTTS ? 'opacity-70 cursor-wait' : ''}`}
                 >
-                  {isSpeaking ? <Square size={16} /> : <Volume2 size={16} />}
-                  {isSpeaking ? 'Stop Reading' : 'Read Aloud'}
+                  {loadingTTS ? (
+                    <div className="w-4 h-4 border-2 border-red-600 border-t-transparent rounded-full animate-spin" />
+                  ) : isSpeaking ? (
+                    <Square size={16} />
+                  ) : (
+                    <Volume2 size={16} />
+                  )}
+                  {loadingTTS ? 'Generating Speech...' : isSpeaking ? 'Stop Reading' : 'Read Aloud'}
                 </button>
               </div>
             </div>
