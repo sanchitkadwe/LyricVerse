@@ -499,6 +499,54 @@ class LabelSongViewSet(viewsets.ReadOnlyModelViewSet):
         label_song.refresh_from_db(fields=['likes'])
         return Response({'likes': label_song.likes}, status=status.HTTP_200_OK)
 
+    @action(detail=True, methods=['post'], permission_classes=[AllowAny], url_path='translate')
+    def translate(self, request, pk=None):
+        label_song = self.get_object()
+        target_language = request.data.get('target_language') or request.data.get('output_language')
+
+        if not target_language:
+            return Response(
+                {'error': 'target_language is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        field_name = get_translation_field_name(target_language)
+        if field_name is None:
+            return Response(
+                {'error': 'Unsupported target language.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        lyrics = label_song.official_lyrics
+        if not str(lyrics).strip():
+            return Response(
+                {'error': 'No lyrics available for translation.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        try:
+            translated_data = translate_lyrics_text(
+                lyrics=lyrics,
+                source_language=label_song.original_language,
+                target_language=target_language,
+            )
+            return Response(
+                {
+                    'song_id': label_song.id,
+                    'source_language': translated_data['source_language'],
+                    'source_language_code': translated_data['source_language_code'],
+                    'target_language': translated_data['target_language'],
+                    'target_language_code': translated_data['target_language_code'],
+                    'translated_lyrics': translated_data['translated_lyrics'],
+                    'cached': False,
+                },
+                status=status.HTTP_200_OK,
+            )
+        except ValueError as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        except Exception as exc:
+            return Response({'error': str(exc)}, status=status.HTTP_502_BAD_GATEWAY)
+
 
 class AnnotationRequestViewSet(viewsets.ModelViewSet):
     serializer_class = AnnotationRequestSerializer

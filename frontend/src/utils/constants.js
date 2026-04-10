@@ -19,6 +19,7 @@ export const API_ENDPOINTS = {
     SONG_TRANSLATE_PREVIEW: '/song/translate-preview/',
     LABEL_SONG_FAVORITE: (songId) => `/label-songs/${songId}/favorite/`,
     LABEL_SONG_LIKE: (songId) => `/label-songs/${songId}/like/`,
+    LABEL_SONG_TRANSLATE: (songId) => `/label-songs/${songId}/translate/`,
     LANGUAGES: '/languages/',
     GENRES: '/genre/',
     DICTIONARY: '/dictionary/',

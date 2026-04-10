@@ -266,7 +266,7 @@ export default function SongDetail() {
   };
 
   const handleTranslate = async (languageCode = activeLang) => {
-    if (isLabelSong || languageCode === 'original') {
+    if (languageCode === 'original') {
       return;
     }
 
@@ -275,9 +275,13 @@ export default function SongDetail() {
       return;
     }
 
+    const translateEndpoint = isLabelSong
+      ? API_ENDPOINTS.LABEL_SONG_TRANSLATE(id)
+      : API_ENDPOINTS.SONG_TRANSLATE(id);
+
     try {
       setTranslationLoadingLang(languageCode);
-      const response = await fetch(`${BASE_URL}${API_ENDPOINTS.SONG_TRANSLATE(id)}`, {
+      const response = await fetch(`${BASE_URL}${translateEndpoint}`, {
         method: 'POST',
         credentials: 'include',
         headers: {
@@ -468,7 +472,7 @@ export default function SongDetail() {
                     <button
                       key={lang.code}
                       onClick={() => {
-                        if (lang.code === 'original' || isLabelSong) {
+                        if (lang.code === 'original') {
                           setActiveLang(lang.code);
                           return;
                         }
@@ -511,31 +515,23 @@ export default function SongDetail() {
                     <Globe2 size={32} className="text-indigo-400" />
                   </div>
                   <h3 className="text-xl font-extrabold text-slate-900 mb-2">
-                    {isLabelSong
-                      ? 'Translation unavailable here'
-                      : translationLoadingLang === activeLang
-                        ? 'Translating...'
-                        : 'No Translation Yet'}
+                    {translationLoadingLang === activeLang ? 'Translating...' : 'No Translation Yet'}
                   </h3>
                   <p className="text-slate-500 max-w-md mb-6 leading-relaxed">
-                    {isLabelSong
-                      ? 'This page currently shows the original label lyrics only.'
-                      : translationLoadingLang === activeLang
-                      ? 'Fetching a saved translation or generating a new one from the backend.'
+                    {translationLoadingLang === activeLang
+                      ? 'Generating a translation from the backend. This may take a moment.'
                       : lyricsData.length === 0
-                      ? 'Original lyrics are not shown here yet, but you can still try generating and saving a translation for this language.'
-                      : 'Click translate to fetch an existing saved version or create one for this song.'}
+                      ? 'No lyrics available yet, but you can still try generating a translation for this language.'
+                      : 'Click translate to generate a translation for this song in the selected language.'}
                   </p>
-                  {!isLabelSong && (
-                    <AnimatedTranslateButton
-                      label={
-                        translationLoadingLang === activeLang
-                          ? 'Translating...'
-                          : `Translate to ${languages.find((lang) => lang.code === activeLang)?.label || 'this language'}`
-                      }
-                      onClick={() => handleTranslate(activeLang)}
-                    />
-                  )}
+                  <AnimatedTranslateButton
+                    label={
+                      translationLoadingLang === activeLang
+                        ? 'Translating...'
+                        : `Translate to ${languages.find((lang) => lang.code === activeLang)?.label || 'this language'}`
+                    }
+                    onClick={() => handleTranslate(activeLang)}
+                  />
                 </div>
               ) : (
                 <div className="space-y-4">
@@ -570,12 +566,14 @@ export default function SongDetail() {
                                   {line.activeTranslation}
                                 </p>
                               ) : (
-                                <div className="mt-2">
-                                  <AnimatedTranslateButton
-                                    label={translationLoadingLang === activeLang ? 'Translating...' : 'Create translation'}
-                                    onClick={() => handleTranslate(activeLang)}
-                                  />
-                                </div>
+                                translationLoadingLang !== activeLang && (
+                                  <div className="mt-2">
+                                    <AnimatedTranslateButton
+                                      label="Create translation"
+                                      onClick={() => handleTranslate(activeLang)}
+                                    />
+                                  </div>
+                                )
                               )}
                             </div>
                           )}

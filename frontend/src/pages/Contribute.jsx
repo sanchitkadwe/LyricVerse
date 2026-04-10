@@ -663,18 +663,38 @@ export default function Contribute() {
 
                   <div className="flex-grow bg-slate-50 border border-slate-200/60 rounded-xl p-4 text-slate-600 text-sm leading-relaxed overflow-y-auto whitespace-pre-wrap">
                     {!formData.original_lyrics.trim() ? (
-                      <p className="italic text-slate-400 text-center mt-10">
-                        Add lyrics in the editor, then click translate to see the current output here.
-                      </p>
+                      <div className="flex flex-col items-center justify-center h-full py-10 text-center">
+                        <div className="w-14 h-14 bg-indigo-50 rounded-full flex items-center justify-center mb-4 border-2 border-white shadow-sm">
+                          <Languages size={24} className="text-indigo-400" />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-700 mb-1">No lyrics yet</p>
+                        <p className="text-xs text-slate-400">Add lyrics in the editor on the left, then generate a translation preview here.</p>
+                      </div>
                     ) : isTranslating ? (
                       <div className="flex flex-col items-center justify-center h-full text-slate-400 space-y-3">
                         <LoaderCircle size={28} className="animate-spin" />
                         <p className="text-sm font-medium">Translating your current lyrics...</p>
                       </div>
                     ) : !translatedPreview ? (
-                      <p className="italic text-slate-400 text-center mt-10">
-                        Click translate to generate the latest preview in the selected language.
-                      </p>
+                      <div className="flex flex-col items-center justify-center h-full py-10 text-center">
+                        <div className="w-14 h-14 bg-indigo-50 rounded-full flex items-center justify-center mb-4 border-2 border-white shadow-sm">
+                          <Sparkles size={24} className="text-indigo-400" />
+                        </div>
+                        <p className="text-sm font-semibold text-slate-700 mb-1">No translation yet</p>
+                        <p className="text-xs text-slate-400 mb-5">
+                          Generate a preview of your lyrics in{' '}
+                          {languageOptions.find((l) => l.code === targetLang)?.label || targetLang}.
+                        </p>
+                        <button
+                          onClick={handleTranslate}
+                          disabled={isTranslating}
+                          className="group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-600 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-indigo-200/70 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-300/70 disabled:opacity-60 disabled:cursor-not-allowed"
+                        >
+                          <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/35 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
+                          <Sparkles size={15} className="relative z-10 transition-transform duration-300 group-hover:rotate-12" />
+                          <span className="relative z-10">Translate Preview</span>
+                        </button>
+                      </div>
                     ) : (
                       translatedPreview
                     )}
@@ -687,7 +707,7 @@ export default function Contribute() {
                   <div className="bg-cyan-50 border border-cyan-100 rounded-xl p-4 flex gap-3 text-cyan-900">
                     <Info size={20} className="flex-shrink-0 mt-0.5" />
                     <p className="text-sm font-medium leading-relaxed">
-                      Collaboration is tied directly to the song state now. Drafts stay private, songs in the annotation stage are visible in Explore for community input, and final publishing closes collaboration and locks the song.
+                      Drafts stay private, songs in the annotation stage are visible in Explore for community input, and final publishing closes collaboration and locks the song.
                     </p>
                   </div>
 
@@ -704,7 +724,7 @@ export default function Contribute() {
                     <p className="mt-4 text-sm text-slate-600 leading-relaxed">
                       While the song is in the annotation stage, other users can discover it under independent songwriters and contribute annotations. After final publish, the song remains public but the author editor becomes read-only.
                     </p>
-                  </div>
+                  </div>Each successful save adds an updated version entry so the author can compare the earliest and latest lyric states.
 
                   <div className="rounded-2xl border border-dashed border-slate-200 p-5">
                     <p className="text-xs font-bold uppercase tracking-wider text-slate-500 mb-3">What authors can review</p>
