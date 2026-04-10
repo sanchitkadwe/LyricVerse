@@ -6,8 +6,11 @@ from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import check_password, make_password
 from django.db.models import Q
-from .models import User, Song, Genre, Languages, LabelSong, Dictionary
-from .serializers import UserSerializer, SongSerializer, GenreSerializer, LanguagesSerializer, LabelSongSerializer, LabelSongDetailSerializer, DictionarySerializer
+from django.utils import timezone
+from .models import User, Song, Genre, Languages, LabelSong, Dictionary, AnnotationRequest
+from .serializers import UserSerializer, SongSerializer, GenreSerializer, LanguagesSerializer, LabelSongSerializer, LabelSongDetailSerializer, DictionarySerializer, AnnotationRequestSerializer
+from django.utils import timezone
+from django.utils import timezone
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
@@ -256,3 +259,147 @@ class LabelSongViewSet(viewsets.ReadOnlyModelViewSet):
         if self.action == 'retrieve':
             return LabelSongDetailSerializer
         return LabelSongSerializer
+
+
+class AnnotationRequestViewSet(viewsets.ModelViewSet):
+    serializer_class = AnnotationRequestSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get_queryset(self):
+        """
+        - If ?song=<id> is provided: return requests for that song (author-only view).
+        - Otherwise: return all requests where the user is either the contributor
+          OR the song's author. This ensures get_object() works for the review action.
+        """
+        user = self.request.user
+        song_id = self.request.query_params.get('song')
+
+        if song_id:
+            # Only the song's author can list requests for a specific song
+            return AnnotationRequest.objects.filter(
+                song__id=song_id,
+                song__author=user,
+            ).select_related('contributor', 'song')
+
+        # Fallback: visible to both the contributor and the song's author
+        # This allows get_object() to resolve in the `review` action
+        return AnnotationRequest.objects.filter(
+            Q(contributor=user) | Q(song__author=user)
+        ).select_related('contributor', 'song')
+
+    def create(self, request, *args, **kwargs):
+        song_id = request.data.get('song')
+
+        if not song_id:
+            return Response({'error': 'song is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            song = Song.objects.get(pk=song_id)
+        except Song.DoesNotExist:
+            return Response({'error': 'Song not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        if song.author == request.user:
+            return Response(
+                {'error': 'You cannot submit an annotation request for your own song.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if song.status != 'PENDING':
+            return Response(
+                {'error': 'Annotation requests can only be submitted for songs that are open for annotation.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        # Prevent duplicate pending submissions by the same user
+        existing = AnnotationRequest.objects.filter(
+            song=song, contributor=request.user, status='pending'
+        ).exists()
+        if existing:
+            return Response(
+                {'error': 'You already have a pending annotation request for this song.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(contributor=request.user, song=song)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'])
+    def review(self, request, pk=None):
+        annotation_request = self.get_object()
+
+        if annotation_request.song.author != request.user:
+            return Response(
+                {'error': 'Only the song author can review annotation requests.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        new_status = request.data.get('status')
+        if new_status not in ('accepted', 'rejected'):
+            return Response(
+                {'error': "status must be 'accepted' or 'rejected'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        annotation_request.status = new_status
+        annotation_request.reviewed_at = timezone.now()
+        annotation_request.save()
+
+        # If accepted, apply the proposed lyrics to the song immediately
+        if new_status == 'accepted':
+            song = annotation_request.song
+            song.original_lyrics = annotation_request.proposed_lyrics
+            song.save(update_fields=['original_lyrics'])
+
+        serializer = self.get_serializer(annotation_request)
+        return Response(serializer.data)
+
+    @action(detail=True, methods=['post'], url_path='partial_review')
+    def partial_review(self, request, pk=None):
+        """
+        Author selects individual diff hunks client-side and sends the
+        already-merged lyrics text. Backend applies those merged lyrics
+        to the song and marks the request as accepted / partially_accepted.
+        """
+        annotation_request = self.get_object()
+
+        if annotation_request.song.author != request.user:
+            return Response(
+                {'error': 'Only the song author can review annotation requests.'},
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        if annotation_request.status != 'pending':
+            return Response(
+                {'error': 'This annotation request has already been reviewed.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        applied_lyrics = request.data.get('applied_lyrics', '').strip()
+        new_status = request.data.get('status', 'partially_accepted')
+
+        if not applied_lyrics:
+            return Response(
+                {'error': 'applied_lyrics is required.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        if new_status not in ('accepted', 'partially_accepted', 'rejected'):
+            return Response(
+                {'error': "status must be 'accepted', 'partially_accepted', or 'rejected'."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        annotation_request.status = new_status
+        annotation_request.reviewed_at = timezone.now()
+        annotation_request.save()
+
+        # Apply the author-curated merged lyrics to the song
+        song = annotation_request.song
+        song.original_lyrics = applied_lyrics
+        song.save(update_fields=['original_lyrics'])
+
+        serializer = self.get_serializer(annotation_request)
+        return Response(serializer.data)

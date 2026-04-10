@@ -15,6 +15,9 @@ export const API_ENDPOINTS = {
     LANGUAGES: '/languages/',
     GENRES: '/genre/',
     DICTIONARY: '/dictionary/',
+    ANNOTATION_REQUESTS: '/annotation-requests/',
+    ANNOTATION_REQUEST_REVIEW: (id) => `/annotation-requests/${id}/review/`,
+    ANNOTATION_REQUEST_PARTIAL_REVIEW: (id) => `/annotation-requests/${id}/partial_review/`,
 };
 
 export const ROLES = {

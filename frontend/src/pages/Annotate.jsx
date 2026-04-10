@@ -1,13 +1,17 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import axios from 'axios';
 import Navbar from '../components/Navbar.jsx';
 import { useToast } from '../components/Toast.jsx';
 import { BASE_URL, API_ENDPOINTS } from '../utils/constants.js';
-import { saveStoredAnnotation, getStoredAnnotations } from '../utils/annotationStore.js';
 import {
-  ArrowLeft, CheckCircle2, MessageSquare, Search, Globe2,
-  X, FileText, BookOpenText, LoaderCircle,
+  ArrowLeft,
+  CheckCircle2,
+  LoaderCircle,
+  Music,
+  SendHorizontal,
+  LockOpen,
+  FileText,
 } from 'lucide-react';
 
 export default function Annotate() {
@@ -16,29 +20,39 @@ export default function Annotate() {
   const { addToast } = useToast();
 
   const [songData, setSongData] = useState(null);
+  const [currentUser, setCurrentUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
   const [fetchError, setFetchError] = useState('');
-  const [activeSelectionType, setActiveSelectionType] = useState(null);
-  const [selectedLines, setSelectedLines] = useState(new Set());
-  const [selectedWord, setSelectedWord] = useState('');
-  const [newAnnotation, setNewAnnotation] = useState('');
-  const [contributions, setContributions] = useState([]);
+  const [proposedLyrics, setProposedLyrics] = useState('');
+  const [note, setNote] = useState('');
 
   useEffect(() => {
-    const fetchSong = async () => {
+    const fetchData = async () => {
       try {
         setLoading(true);
         setFetchError('');
-        const response = await axios.get(`${BASE_URL}${API_ENDPOINTS.SONGS}${id}/`, {
-          withCredentials: true,
-        });
 
-        if (response.data.status !== 'PENDING' || !response.data.can_annotate) {
+        const [profileResponse, songResponse] = await Promise.all([
+          axios.get(`${BASE_URL}${API_ENDPOINTS.PROFILE}`, { withCredentials: true }),
+          axios.get(`${BASE_URL}${API_ENDPOINTS.SONGS}${id}/`, { withCredentials: true }),
+        ]);
+
+        const user = profileResponse.data;
+        const song = songResponse.data;
+
+        if (song.status !== 'PENDING') {
           throw new Error('This song is not currently accepting annotations.');
         }
 
-        setSongData(response.data);
-        setContributions(getStoredAnnotations(id));
+        if (song.author === user.id) {
+          throw new Error('You cannot annotate your own song. Use the Manage Annotations page to review contributions.');
+        }
+
+        setCurrentUser(user);
+        setSongData(song);
+        setProposedLyrics(song.original_lyrics || '');
       } catch (error) {
         console.error('Failed to load annotation workspace:', error);
         if (error.response?.status === 401) {
@@ -51,76 +65,44 @@ export default function Annotate() {
       }
     };
 
-    fetchSong();
+    fetchData();
   }, [id, navigate]);
 
-  const lyricsData = useMemo(() => {
-    const rawLyrics = songData?.original_lyrics || '';
-    return rawLyrics
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line, index) => ({ id: index + 1, text: line }));
-  }, [songData]);
-
-  const handleWordSelection = (word) => {
-    setActiveSelectionType('word');
-    setSelectedWord(word.replace(/[,.]/g, ''));
-    setSelectedLines(new Set());
-  };
-
-  const handleLineSelectionToggle = (lineId) => {
-    setActiveSelectionType('lines');
-    setSelectedWord('');
-    setSelectedLines((current) => {
-      const next = new Set(current);
-      if (next.has(lineId)) {
-        next.delete(lineId);
-      } else {
-        next.add(lineId);
-      }
-      return next;
-    });
-  };
-
-  const clearSelection = () => {
-    setActiveSelectionType(null);
-    setSelectedWord('');
-    setSelectedLines(new Set());
-    setNewAnnotation('');
-  };
-
-  const renderSelectedContext = () => {
-    if (activeSelectionType === 'word' && selectedWord) {
-      return `Word: ${selectedWord}`;
-    }
-    if (activeSelectionType === 'lines' && selectedLines.size > 0) {
-      const sorted = [...selectedLines].sort((a, b) => a - b);
-      return sorted.length === 1 ? `Line: ${sorted[0]}` : `Lines: ${sorted[0]} - ${sorted[sorted.length - 1]}`;
-    }
-    return null;
-  };
-
-  const handleSaveContribution = () => {
-    const context = renderSelectedContext();
-    if (!context || !newAnnotation.trim()) {
+  const handleSubmit = async () => {
+    if (!proposedLyrics.trim()) {
+      addToast({ type: 'error', title: 'Lyrics required', description: 'Please add your proposed lyrics before submitting.' });
       return;
     }
 
-    const next = saveStoredAnnotation(id, {
-      contributor: 'Current User',
-      lines: context,
-      annotation: newAnnotation.trim(),
-    });
-    setContributions(next);
-    clearSelection();
-    addToast({
-      type: 'success',
-      title: 'Contribution saved',
-      description: 'Your annotation is now available for the song author to review.',
-    });
+    try {
+      setSubmitting(true);
+      await axios.post(
+        `${BASE_URL}${API_ENDPOINTS.ANNOTATION_REQUESTS}`,
+        {
+          song: id,
+          proposed_lyrics: proposedLyrics.trim(),
+          note: note.trim(),
+        },
+        { withCredentials: true },
+      );
+
+      setSubmitted(true);
+      addToast({
+        type: 'success',
+        title: 'Annotation request sent!',
+        description: 'The song author will review your proposed changes.',
+      });
+    } catch (error) {
+      console.error('Failed to submit annotation request:', error);
+      const description =
+        error.response?.data?.error || 'Unable to submit your annotation request right now.';
+      addToast({ type: 'error', title: 'Submission failed', description });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
+  /* ── Loading ── */
   if (loading) {
     return (
       <div className="min-h-screen bg-[#fafafa] font-sans flex flex-col">
@@ -132,6 +114,7 @@ export default function Annotate() {
     );
   }
 
+  /* ── Error / Not eligible ── */
   if (fetchError || !songData) {
     return (
       <div className="min-h-screen bg-[#fafafa] font-sans flex flex-col">
@@ -149,158 +132,153 @@ export default function Annotate() {
     );
   }
 
+  /* ── Submitted success state ── */
+  if (submitted) {
+    return (
+      <div className="min-h-screen bg-[#fafafa] font-sans flex flex-col">
+        <Navbar />
+        <div className="max-w-2xl mx-auto px-4 sm:px-6 w-full mt-24">
+          <div className="bg-white/80 border border-slate-200/60 rounded-[2rem] p-12 shadow-sm text-center">
+            <div className="w-20 h-20 bg-emerald-50 border-4 border-emerald-100 rounded-full flex items-center justify-center mx-auto mb-6">
+              <CheckCircle2 size={36} className="text-emerald-500" />
+            </div>
+            <h1 className="text-2xl font-extrabold text-slate-900 mb-2">Annotation request sent!</h1>
+            <p className="text-slate-500 text-sm mb-8">
+              Your proposed changes have been sent to <strong>{songData.author_username}</strong> for review.
+              You'll know when they accept or reject your contribution.
+            </p>
+            <div className="flex justify-center gap-3">
+              <Link to="/explore" className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-bold text-white hover:bg-slate-800">
+                <ArrowLeft size={16} /> Back to Explore
+              </Link>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  /* ── Main editor ── */
   return (
     <div className="min-h-screen bg-[#fafafa] selection:bg-indigo-100 selection:text-indigo-900 font-sans pb-24 relative flex flex-col">
       <Navbar />
 
+      {/* Blurred background blobs */}
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-200 rounded-full mix-blend-multiply filter blur-[120px] opacity-40" />
         <div className="absolute bottom-[20%] left-[-10%] w-[40%] h-[40%] bg-violet-200 rounded-full mix-blend-multiply filter blur-[120px] opacity-30" />
       </div>
 
-      <div className="sticky top-16 z-40 backdrop-blur-xl bg-white/70 border-b border-slate-200/60 py-4 mb-8">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 flex justify-between items-center">
+      {/* Sticky header */}
+      <div className="sticky top-0 z-40 backdrop-blur-xl bg-white/70 border-b border-slate-200/60 py-4 mb-8">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 flex justify-between items-center gap-4">
           <div className="flex items-center gap-4">
             <Link to="/explore" className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-full transition-colors">
               <ArrowLeft size={20} />
             </Link>
-            <div className="flex flex-col">
-              <span className="text-xs font-medium text-slate-500">Annotating:</span>
-              <h1 className="text-xl font-bold text-slate-900 tracking-tight">{songData.title} by {songData.author_username}</h1>
+            <div>
+              <span className="text-xs font-medium text-slate-500">Annotating</span>
+              <h1 className="text-xl font-bold text-slate-900 tracking-tight">
+                {songData.title}
+                <span className="ml-2 text-sm font-semibold text-slate-500">by {songData.author_username}</span>
+              </h1>
             </div>
           </div>
-          <button
-            onClick={handleSaveContribution}
-            disabled={!activeSelectionType || !newAnnotation.trim()}
-            className="flex items-center gap-2 px-6 py-2.5 bg-slate-900 disabled:bg-slate-700 hover:bg-slate-800 text-white rounded-full text-sm font-semibold shadow-md"
-          >
-            <CheckCircle2 size={16} /> Save Contribution
-          </button>
+
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-sky-50 border border-sky-100 px-3 py-1 text-xs font-bold uppercase tracking-wider text-sky-700">
+            <LockOpen size={12} /> Open for Annotation
+          </span>
+
         </div>
       </div>
 
-      <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 w-full flex-grow">
+      {/* Two-column layout */}
+      <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 w-full flex-grow">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-          <div className="lg:col-span-8">
-            <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-[2rem] p-8 sm:p-12 shadow-sm min-h-[500px]">
-              <div className="space-y-6">
-                {lyricsData.map((line) => {
-                  const isLineSelected = selectedLines.has(line.id);
-                  return (
-                    <div key={line.id} className={`relative flex items-start gap-4 p-4 -mx-4 rounded-2xl transition-all ${isLineSelected ? 'bg-indigo-50 border border-indigo-200 shadow-inner' : 'hover:bg-slate-50'}`}>
-                      <input
-                        type="checkbox"
-                        checked={isLineSelected}
-                        onChange={() => handleLineSelectionToggle(line.id)}
-                        className="mt-2 h-5 w-5 rounded-md border-slate-300 text-indigo-600 focus:ring-indigo-600/20"
-                      />
-                      <div className="text-xs font-bold text-slate-300 mt-2 select-none w-4">{line.id}</div>
-                      <div className="flex-1">
-                        <p className={`text-2xl sm:text-3xl font-bold ${isLineSelected ? 'text-indigo-950' : 'text-slate-800'} leading-snug`}>
-                          {line.text.split(' ').map((word, wordIndex) => (
-                            <span key={`${line.id}-${wordIndex}`} className="relative inline-block group">
-                              <span
-                                onClick={() => handleWordSelection(word)}
-                                className={`cursor-pointer transition-colors ${activeSelectionType === 'word' && selectedWord === word.replace(/[,.]/g, '') ? 'text-indigo-600 bg-indigo-100 rounded-md px-1' : 'group-hover:text-indigo-600 group-hover:bg-indigo-50 rounded-md'}`}
-                              >
-                                {word}
-                              </span>{' '}
-                            </span>
-                          ))}
-                        </p>
-                      </div>
-                    </div>
-                  );
-                })}
+
+          {/* Main editor — left column */}
+          <div className="lg:col-span-8 flex flex-col gap-6">
+            {/* Instructions banner */}
+            <div className="flex items-start gap-3 bg-indigo-50 border border-indigo-100 rounded-2xl px-5 py-4 text-indigo-900">
+              <FileText size={18} className="mt-0.5 flex-shrink-0 text-indigo-500" />
+              <p className="text-sm font-medium leading-relaxed">
+                The original lyrics are pre-filled below. Edit them however you think they should read, then click <strong>Save Contribution</strong>. The author will review your changes.
+              </p>
+            </div>
+
+            {/* Lyrics textarea */}
+            <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-2xl shadow-sm overflow-hidden flex flex-col flex-grow min-h-[520px]">
+              {/* Editor toolbar */}
+              <div className="border-b border-slate-200/60 bg-slate-50/50 px-5 py-3 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <Music size={15} className="text-slate-400" />
+                  <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">Proposed Lyrics</span>
+                </div>
+                <span className="text-xs text-slate-400 font-medium">
+                  {proposedLyrics.split('\n').filter(Boolean).length} lines
+                </span>
               </div>
+
+              <textarea
+                value={proposedLyrics}
+                onChange={(e) => setProposedLyrics(e.target.value)}
+                className="w-full flex-grow p-6 bg-transparent resize-none focus:outline-none text-slate-800 text-lg leading-relaxed placeholder-slate-300 font-medium"
+                placeholder="Edit the song lyrics here..."
+                spellCheck
+              />
             </div>
           </div>
 
+          {/* Sidebar — right column */}
           <div className="lg:col-span-4 flex flex-col gap-6">
-            <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-3xl p-6 sm:p-8 shadow-sm">
-              <div className="flex items-center justify-between mb-6">
-                <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">Contribution Workspace</h3>
-                {activeSelectionType && (
-                  <button onClick={clearSelection} className="p-1 text-slate-400 hover:text-slate-900 rounded-md">
-                    <X size={16} />
-                  </button>
-                )}
-              </div>
+            {/* Note to author */}
+            <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-3xl p-6 shadow-sm">
+              <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
+                Note to Author <span className="font-normal text-slate-400">(optional)</span>
+              </label>
+              <textarea
+                rows={5}
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Explain your changes, e.g. 'Fixed a spelling error in line 3' or 'Suggested a better rhyme for the chorus'..."
+                className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-medium text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600"
+              />
+            </div>
 
-              {activeSelectionType ? (
-                <div className="space-y-6">
-                  <div className="bg-indigo-50 text-indigo-900 p-4 rounded-2xl border border-indigo-100 font-bold flex items-center justify-between gap-3">
-                    <span className="truncate">{renderSelectedContext()}</span>
-                    <MessageSquare size={18} className="text-indigo-400 shrink-0" />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Annotation / Suggest Edit</label>
-                    <textarea
-                      rows="4"
-                      value={newAnnotation}
-                      onChange={(event) => setNewAnnotation(event.target.value)}
-                      placeholder={`Add your explanation or suggest better words for ${renderSelectedContext()}...`}
-                      className="w-full p-4 bg-slate-50 border border-slate-200 rounded-2xl text-slate-900 font-medium resize-none focus:outline-none focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600"
-                    />
-                  </div>
-                  {activeSelectionType === 'word' && (
-                    <div className="border-t border-slate-100 pt-6">
-                      <div className="flex gap-2 mb-4">
-                        <BookOpenText size={20} className="text-slate-400" />
-                        <h4 className="text-sm font-bold text-slate-900">Look Up: '{selectedWord}'</h4>
-                      </div>
-                      <div className="space-y-4">
-                        <div>
-                          <h5 className="text-xs font-bold text-slate-500 mb-1.5 uppercase">Suggested context</h5>
-                          <p className="text-xs font-medium text-slate-600 leading-relaxed bg-slate-50 p-3 rounded-lg border border-slate-100">
-                            Use this space to explain local idioms, cultural references, or better word choices for future readers.
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {activeSelectionType === 'lines' && selectedLines.size > 0 && (
-                    <div className="border-t border-slate-100 pt-6">
-                      <div className="flex items-center gap-3 bg-violet-50 text-violet-800 p-4 rounded-2xl border border-violet-100">
-                        <Globe2 size={20} className="text-violet-500" />
-                        <div className="flex flex-col">
-                          <p className="text-xs font-bold text-violet-900 mb-1">Line-level note</p>
-                          <p className="text-sm font-medium leading-snug">Suggest phrasing, context, or translation guidance for the selected lines.</p>
-                        </div>
-                      </div>
-                    </div>
-                  )}
+            {/* Song info card */}
+            <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-3xl p-6 shadow-sm text-sm text-slate-600 space-y-3">
+              <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Song Info</p>
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-medium">Title</span>
+                <span className="font-semibold text-slate-800">{songData.title}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-slate-400 font-medium">Author</span>
+                <span className="font-semibold text-slate-800">{songData.author_username}</span>
+              </div>
+              {songData.genre_display && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400 font-medium">Genre</span>
+                  <span className="font-semibold text-slate-800">{songData.genre_display}</span>
                 </div>
-              ) : (
-                <div className="flex flex-col items-center justify-center text-center py-12 text-slate-500">
-                  <div className="w-16 h-16 bg-slate-100 rounded-full flex items-center justify-center mb-6 border-4 border-white shadow-inner">
-                    <FileText size={24} className="text-slate-400" />
-                  </div>
-                  <h4 className="text-base font-extrabold text-slate-800 mb-1.5">Select lyrics to annotate</h4>
-                  <p className="text-sm leading-relaxed max-w-xs font-medium">Pick a word or lines from the lyrics and submit your contribution.</p>
+              )}
+              {songData.original_language_display && (
+                <div className="flex justify-between">
+                  <span className="text-slate-400 font-medium">Language</span>
+                  <span className="font-semibold text-slate-800">{songData.original_language_display}</span>
                 </div>
               )}
             </div>
 
-            <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-3xl p-6 sm:p-8 shadow-sm">
-              <div className="flex justify-between items-center mb-6">
-                <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider">Recent Contributions</h3>
-                <span className="text-xs font-semibold text-slate-500">{contributions.length} saved</span>
-              </div>
-              <div className="space-y-5">
-                {contributions.length ? contributions.map((contribution) => (
-                  <div key={contribution.id} className="border-b border-slate-100 pb-5 last:border-0 last:pb-0">
-                    <div className="flex justify-between items-start gap-2 mb-2">
-                      <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">{contribution.lines}</span>
-                      <span className="text-xs font-semibold text-slate-400">{new Date(contribution.created_at).toLocaleDateString('en-IN')}</span>
-                    </div>
-                    <p className="text-sm font-medium text-slate-800 leading-relaxed">{contribution.annotation}</p>
-                  </div>
-                )) : (
-                  <div className="text-sm text-slate-500">No contributions saved for this song yet.</div>
-                )}
-              </div>
-            </div>
+            {/* Submit button (also in sidebar for convenience) */}
+            <button
+              onClick={handleSubmit}
+              disabled={submitting || !proposedLyrics.trim()}
+              className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-slate-900 disabled:bg-slate-400 hover:bg-slate-800 text-white rounded-2xl text-sm font-bold shadow-md transition-all disabled:cursor-not-allowed"
+            >
+              {submitting ? <LoaderCircle size={16} className="animate-spin" /> : <SendHorizontal size={16} />}
+              {submitting ? 'Submitting...' : 'Save Contribution'}
+            </button>
           </div>
         </div>
       </div>

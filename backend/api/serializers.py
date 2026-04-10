@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Song, Languages, Genre, LabelSong, Dictionary
+from .models import User, Song, Languages, Genre, LabelSong, Dictionary, AnnotationRequest 
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -99,4 +99,31 @@ class LabelSongDetailSerializer(LabelSongSerializer):
         fields = LabelSongSerializer.Meta.fields + [
             'official_lyrics',
             'created_at',
+        ]
+
+
+
+class AnnotationRequestSerializer(serializers.ModelSerializer):
+    contributor_username = serializers.ReadOnlyField(source='contributor.username')
+    song_title = serializers.ReadOnlyField(source='song.title')
+    song_author = serializers.ReadOnlyField(source='song.author.id')
+
+    class Meta:
+        model = AnnotationRequest
+        fields = [
+            'id',
+            'song',
+            'song_title',
+            'song_author',
+            'contributor',
+            'contributor_username',
+            'proposed_lyrics',
+            'note',
+            'status',
+            'created_at',
+            'reviewed_at',
+        ]
+        read_only_fields = [
+            'contributor', 'status', 'created_at', 'reviewed_at',
+            'song_title', 'song_author',
         ]
