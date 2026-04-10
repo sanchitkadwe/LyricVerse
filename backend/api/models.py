@@ -192,6 +192,34 @@ class Dictionary(models.Model):
 
     def __str__(self):
         return f"{self.word} ({self.get_language_display()})"
+
+
+class WordContribution(models.Model):
+    dictionary = models.ForeignKey(Dictionary, on_delete=models.CASCADE, related_name='contributions')
+    contributor = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='word_contributions')
+    meaning = models.TextField()
+    cultural_context = models.TextField(blank=True, default='')
+    upvotes = models.IntegerField(default=0)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ['-upvotes', '-created_at']
+
+    def __str__(self):
+        return f"{self.contributor.username} on '{self.dictionary.word}'"
+
+
+class SavedWord(models.Model):
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='saved_words')
+    dictionary = models.ForeignKey(Dictionary, on_delete=models.CASCADE, related_name='saved_by')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        unique_together = [['user', 'dictionary']]
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.user.username} saved '{self.dictionary.word}'"
     
 
 class TranslatedLyrics(models.Model):

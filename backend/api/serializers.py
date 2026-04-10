@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Song, Languages, Genre, LabelSong, Dictionary, AnnotationRequest, FavoriteSong
+from .models import User, Song, Languages, Genre, LabelSong, Dictionary, AnnotationRequest, FavoriteSong, WordContribution, SavedWord
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -20,12 +20,29 @@ class GenreSerializer(serializers.ModelSerializer):
         fields = ['display_name','name']
 
 
+class WordContributionSerializer(serializers.ModelSerializer):
+    contributor_username = serializers.ReadOnlyField(source='contributor.username')
+
+    class Meta:
+        model = WordContribution
+        fields = ['id', 'dictionary', 'contributor', 'contributor_username', 'meaning', 'cultural_context', 'upvotes', 'created_at']
+        read_only_fields = ['contributor', 'upvotes', 'created_at']
+
+
 class DictionarySerializer(serializers.ModelSerializer):
     language_display = serializers.CharField(source='get_language_display', read_only=True)
+    contributions_count = serializers.IntegerField(source='contributions.count', read_only=True)
+    is_saved = serializers.SerializerMethodField()
 
     class Meta:
         model = Dictionary
-        fields = ['id', 'word', 'language', 'language_display', 'meaning']
+        fields = ['id', 'word', 'language', 'language_display', 'meaning', 'contributions_count', 'is_saved']
+
+    def get_is_saved(self, obj):
+        request = self.context.get('request')
+        if not request or not request.user.is_authenticated:
+            return False
+        return obj.saved_by.filter(user=request.user).exists()
 
 class SongSerializer(serializers.ModelSerializer):
     author_username = serializers.ReadOnlyField(source='author.username')

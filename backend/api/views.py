@@ -8,8 +8,8 @@ from django.contrib.auth.hashers import check_password, make_password
 from django.db.models import Prefetch, Q
 from django.db.models import F
 from django.utils import timezone
-from .models import User, Song, Genre, Languages, LabelSong, Dictionary, AnnotationRequest, FavoriteSong, TranslatedLyrics
-from .serializers import UserSerializer, SongSerializer, GenreSerializer, LanguagesSerializer, LabelSongSerializer, LabelSongDetailSerializer, DictionarySerializer, AnnotationRequestSerializer, FavoriteSongSerializer
+from .models import User, Song, Genre, Languages, LabelSong, Dictionary, AnnotationRequest, FavoriteSong, TranslatedLyrics, WordContribution, SavedWord
+from .serializers import UserSerializer, SongSerializer, GenreSerializer, LanguagesSerializer, LabelSongSerializer, LabelSongDetailSerializer, DictionarySerializer, AnnotationRequestSerializer, FavoriteSongSerializer, WordContributionSerializer
 from django.utils import timezone
 from django.utils import timezone
 from .translation_utils import get_translation_field_name, normalize_language_code, normalize_language_name, translate_lyrics_text
@@ -454,7 +454,65 @@ class LanguagesViewSet(viewsets.ModelViewSet):
 class DictionaryViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Dictionary.objects.all().order_by('word')
     serializer_class = DictionarySerializer
-    http_method_names = ['get']
+    http_method_names = ['get', 'post', 'delete', 'head', 'options']
+
+    @action(detail=True, methods=['post'], permission_classes=[IsAuthenticated])
+    def save_word(self, request, pk=None):
+        word = self.get_object()
+        SavedWord.objects.get_or_create(user=request.user, dictionary=word)
+        return Response({'is_saved': True}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['delete'], permission_classes=[IsAuthenticated])
+    def unsave_word(self, request, pk=None):
+        word = self.get_object()
+        SavedWord.objects.filter(user=request.user, dictionary=word).delete()
+        return Response({'is_saved': False}, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated], url_path='saved')
+    def saved(self, request):
+        saved_ids = SavedWord.objects.filter(user=request.user).values_list('dictionary_id', flat=True)
+        words = Dictionary.objects.filter(id__in=saved_ids).order_by('word')
+        serializer = self.get_serializer(words, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
+
+
+class WordContributionViewSet(viewsets.ModelViewSet):
+    serializer_class = WordContributionSerializer
+    permission_classes = [IsAuthenticated]
+    http_method_names = ['get', 'post', 'head', 'options']
+
+    def get_permissions(self):
+        if self.action in ['list', 'retrieve']:
+            return [AllowAny()]
+        return [IsAuthenticated()]
+
+    def get_queryset(self):
+        queryset = WordContribution.objects.select_related('contributor', 'dictionary')
+        word_id = self.request.query_params.get('word_id')
+        if word_id:
+            queryset = queryset.filter(dictionary_id=word_id)
+        return queryset
+
+    def create(self, request, *args, **kwargs):
+        word_id = request.data.get('dictionary')
+        if not word_id:
+            return Response({'error': 'dictionary is required.'}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            Dictionary.objects.get(pk=word_id)
+        except Dictionary.DoesNotExist:
+            return Response({'error': 'Word not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        serializer.save(contributor=request.user)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+    @action(detail=True, methods=['post'], permission_classes=[AllowAny])
+    def upvote(self, request, pk=None):
+        contribution = self.get_object()
+        WordContribution.objects.filter(pk=contribution.pk).update(upvotes=F('upvotes') + 1)
+        contribution.refresh_from_db(fields=['upvotes'])
+        return Response({'upvotes': contribution.upvotes}, status=status.HTTP_200_OK)
 
 
 class LabelSongViewSet(viewsets.ReadOnlyModelViewSet):

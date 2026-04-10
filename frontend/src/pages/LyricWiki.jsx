@@ -1,15 +1,20 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
 import {
   Search,
   BookOpen,
   ThumbsUp,
-  MessageSquare,
   Globe2,
-  Music,
   Quote,
   Sparkles,
   LoaderCircle,
+  Bookmark,
+  BookmarkCheck,
+  ChevronDown,
+  ChevronUp,
+  Plus,
+  MessageSquare,
+  User,
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
 import { API_ENDPOINTS, BASE_URL, LANGUAGES } from '../utils/constants';
@@ -24,16 +29,281 @@ const LANGUAGE_TINT = {
   bn: 'bg-rose-50 text-rose-700 border border-rose-100',
 };
 
-function buildLyricContext(term, languageLabel, meaning) {
-  return `"${term}" carries a ${languageLabel.toLowerCase()} lyric texture that points toward ${meaning.toLowerCase()}.`;
+// ── Contribution form component ─────────────────────────────────────────────
+function ContributeForm({ wordId, onSuccess, onCancel }) {
+  const [meaning, setMeaning] = useState('');
+  const [culturalContext, setCulturalContext] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!meaning.trim()) {
+      setError('Meaning is required.');
+      return;
+    }
+    setSubmitting(true);
+    setError('');
+    try {
+      const { data } = await axios.post(
+        `${BASE_URL}${API_ENDPOINTS.WORD_CONTRIBUTIONS}`,
+        { dictionary: wordId, meaning: meaning.trim(), cultural_context: culturalContext.trim() },
+        { withCredentials: true }
+      );
+      onSuccess(data);
+    } catch (err) {
+      setError(err.response?.data?.error || err.response?.data?.detail || 'Failed to submit. Please log in first.');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="mt-4 bg-pink-50/60 border border-pink-100 rounded-2xl p-4 flex flex-col gap-3">
+      <p className="text-sm font-bold text-slate-700">Add your interpretation</p>
+      <textarea
+        rows={2}
+        placeholder="Your meaning or definition…"
+        value={meaning}
+        onChange={(e) => setMeaning(e.target.value)}
+        className="w-full text-sm px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-400/30 focus:border-pink-400 resize-none bg-white text-slate-800 placeholder-slate-400"
+      />
+      <textarea
+        rows={2}
+        placeholder="Cultural context or significance (optional)…"
+        value={culturalContext}
+        onChange={(e) => setCulturalContext(e.target.value)}
+        className="w-full text-sm px-3 py-2 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-pink-400/30 focus:border-pink-400 resize-none bg-white text-slate-800 placeholder-slate-400"
+      />
+      {error && <p className="text-xs font-medium text-red-600">{error}</p>}
+      <div className="flex gap-2 justify-end">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="px-3 py-1.5 rounded-lg text-sm font-semibold text-slate-500 hover:bg-slate-100 transition-colors"
+        >
+          Cancel
+        </button>
+        <button
+          type="submit"
+          disabled={submitting}
+          className="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-sm font-bold bg-pink-500 text-white hover:bg-pink-600 disabled:opacity-50 transition-colors"
+        >
+          {submitting ? <LoaderCircle size={14} className="animate-spin" /> : <Plus size={14} />}
+          Submit
+        </button>
+      </div>
+    </form>
+  );
 }
 
+// ── Single contribution row ──────────────────────────────────────────────────
+function ContributionRow({ contribution, onUpvote }) {
+  const [upvotes, setUpvotes] = useState(contribution.upvotes);
+  const [voted, setVoted] = useState(false);
+
+  const handleUpvote = async () => {
+    if (voted) return;
+    try {
+      const { data } = await axios.post(
+        `${BASE_URL}${API_ENDPOINTS.WORD_CONTRIBUTION_UPVOTE(contribution.id)}`,
+        {},
+        { withCredentials: true }
+      );
+      setUpvotes(data.upvotes);
+      setVoted(true);
+      onUpvote?.(contribution.id, data.upvotes);
+    } catch {
+      // silently ignore
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-1.5 py-3 border-b border-slate-100 last:border-0">
+      <p className="text-sm text-slate-700 font-medium leading-relaxed">{contribution.meaning}</p>
+      {contribution.cultural_context && (
+        <p className="text-xs text-slate-500 italic leading-relaxed">
+          <span className="font-semibold text-violet-600 not-italic">Cultural context: </span>
+          {contribution.cultural_context}
+        </p>
+      )}
+      <div className="flex items-center justify-between mt-1">
+        <div className="flex items-center gap-1.5 text-xs text-slate-400">
+          <User size={12} />
+          <span>{contribution.contributor_username}</span>
+        </div>
+        <button
+          type="button"
+          onClick={handleUpvote}
+          disabled={voted}
+          className={`flex items-center gap-1 text-xs font-bold px-2.5 py-1 rounded-lg border transition-colors ${
+            voted
+              ? 'bg-pink-50 border-pink-200 text-pink-600'
+              : 'bg-slate-50 border-slate-200 text-slate-500 hover:bg-pink-50 hover:border-pink-200 hover:text-pink-600'
+          }`}
+        >
+          <ThumbsUp size={12} />
+          {upvotes}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Word card ────────────────────────────────────────────────────────────────
+function WordCard({ item, onSaveToggle }) {
+  const [expanded, setExpanded] = useState(false);
+  const [showForm, setShowForm] = useState(false);
+  const [contributions, setContributions] = useState(null); // null = not loaded yet
+  const [loadingContributions, setLoadingContributions] = useState(false);
+  const [contributionsCount, setContributionsCount] = useState(item.contributions_count ?? 0);
+  const [isSaved, setIsSaved] = useState(item.is_saved ?? false);
+  const [savingWord, setSavingWord] = useState(false);
+
+  const loadContributions = useCallback(async () => {
+    if (contributions !== null) return; // already loaded
+    setLoadingContributions(true);
+    try {
+      const { data } = await axios.get(
+        `${BASE_URL}${API_ENDPOINTS.WORD_CONTRIBUTIONS}?word_id=${item.id}`,
+        { withCredentials: true }
+      );
+      setContributions(Array.isArray(data) ? data : (data.results ?? []));
+    } catch {
+      setContributions([]);
+    } finally {
+      setLoadingContributions(false);
+    }
+  }, [contributions, item.id]);
+
+  const handleExpand = () => {
+    if (!expanded) loadContributions();
+    setExpanded((v) => !v);
+  };
+
+  const handleContributionSuccess = (newContribution) => {
+    setContributions((prev) => [newContribution, ...(prev ?? [])]);
+    setContributionsCount((c) => c + 1);
+    setShowForm(false);
+    if (!expanded) setExpanded(true);
+  };
+
+  const handleSave = async () => {
+    setSavingWord(true);
+    try {
+      if (isSaved) {
+        await axios.delete(`${BASE_URL}${API_ENDPOINTS.DICTIONARY_UNSAVE(item.id)}`, { withCredentials: true });
+        setIsSaved(false);
+        onSaveToggle?.(item.id, false);
+      } else {
+        await axios.post(`${BASE_URL}${API_ENDPOINTS.DICTIONARY_SAVE(item.id)}`, {}, { withCredentials: true });
+        setIsSaved(true);
+        onSaveToggle?.(item.id, true);
+      }
+    } catch {
+      // silently ignore (not logged in, etc.)
+    } finally {
+      setSavingWord(false);
+    }
+  };
+
+  return (
+    <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-[2rem] p-6 sm:p-8 shadow-sm hover:shadow-xl hover:shadow-pink-100/40 hover:border-pink-200/60 transition-all duration-300 flex flex-col group">
+      {/* Header */}
+      <div className="flex justify-between items-start mb-4 gap-3">
+        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">{item.word}</h2>
+        <div className="flex items-center gap-2 shrink-0">
+          <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${LANGUAGE_TINT[item.languageCode] || 'bg-pink-50 text-pink-700 border border-pink-100'}`}>
+            {item.displayLanguage}
+          </span>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={savingWord}
+            title={isSaved ? 'Remove from saved' : 'Save this word'}
+            className={`p-1.5 rounded-lg border transition-colors ${
+              isSaved
+                ? 'bg-violet-50 border-violet-200 text-violet-600 hover:bg-red-50 hover:border-red-200 hover:text-red-500'
+                : 'bg-slate-50 border-slate-200 text-slate-400 hover:bg-violet-50 hover:border-violet-200 hover:text-violet-600'
+            }`}
+          >
+            {isSaved ? <BookmarkCheck size={16} /> : <Bookmark size={16} />}
+          </button>
+        </div>
+      </div>
+
+      {/* Base meaning */}
+      <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 mb-4 relative overflow-hidden">
+        <Quote size={80} className="absolute -top-4 -left-4 text-slate-100 rotate-180" />
+        <p className="relative z-10 text-slate-700 font-medium italic">{item.meaning}</p>
+      </div>
+
+      {/* Community contributions toggle */}
+      <button
+        type="button"
+        onClick={handleExpand}
+        className="flex items-center justify-between w-full text-sm font-semibold text-slate-500 hover:text-pink-600 transition-colors mb-1 group/expand"
+      >
+        <span className="flex items-center gap-2">
+          <MessageSquare size={15} />
+          {contributionsCount > 0
+            ? `${contributionsCount} community interpretation${contributionsCount !== 1 ? 's' : ''}`
+            : 'No community interpretations yet'}
+        </span>
+        {expanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+      </button>
+
+      {/* Expanded contributions list */}
+      {expanded && (
+        <div className="mt-2">
+          {loadingContributions ? (
+            <div className="flex justify-center py-4">
+              <LoaderCircle size={18} className="animate-spin text-pink-400" />
+            </div>
+          ) : contributions && contributions.length > 0 ? (
+            <div className="divide-y divide-slate-100">
+              {contributions.map((c) => (
+                <ContributionRow key={c.id} contribution={c} />
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-slate-400 italic py-2 text-center">
+              Be the first to add a meaning or cultural context.
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Add contribution */}
+      {showForm ? (
+        <ContributeForm
+          wordId={item.id}
+          onSuccess={handleContributionSuccess}
+          onCancel={() => setShowForm(false)}
+        />
+      ) : (
+        <button
+          type="button"
+          onClick={() => setShowForm(true)}
+          className="mt-4 flex items-center gap-2 text-sm font-bold text-pink-500 hover:text-pink-700 transition-colors self-start"
+        >
+          <Plus size={15} />
+          Add meaning / cultural context
+        </button>
+      )}
+    </div>
+  );
+}
+
+// ── Main page ────────────────────────────────────────────────────────────────
 export default function LyricWiki() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeLang, setActiveLang] = useState(LANGUAGE_FILTERS[0]?.code || 'en');
+  const [viewMode, setViewMode] = useState('all'); // 'all' | 'saved'
   const [wikiTerms, setWikiTerms] = useState([]);
-  const [genres, setGenres] = useState([]);
+  const [savedTerms, setSavedTerms] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadingSaved, setLoadingSaved] = useState(false);
   const [fetchError, setFetchError] = useState('');
 
   useEffect(() => {
@@ -41,54 +311,68 @@ export default function LyricWiki() {
       try {
         setLoading(true);
         setFetchError('');
-
-        const [dictionaryResponse, genreResponse] = await Promise.all([
-          axios.get(`${BASE_URL}${API_ENDPOINTS.DICTIONARY}`, { withCredentials: true }),
-          axios.get(`${BASE_URL}${API_ENDPOINTS.GENRES}`, { withCredentials: true }),
-        ]);
-
-        setWikiTerms(Array.isArray(dictionaryResponse.data) ? dictionaryResponse.data : []);
-        setGenres(Array.isArray(genreResponse.data) ? genreResponse.data : []);
-      } catch (error) {
-        console.error('Failed to load lyric wiki:', error);
+        const { data } = await axios.get(`${BASE_URL}${API_ENDPOINTS.DICTIONARY}`, { withCredentials: true });
+        setWikiTerms(Array.isArray(data) ? data : []);
+      } catch {
         setFetchError('Unable to load the lyric wiki right now.');
       } finally {
         setLoading(false);
       }
     };
-
     fetchWikiData();
   }, []);
 
-  const termsWithUiData = useMemo(() => {
-    return wikiTerms.map((term, index) => {
-      const languageMeta = LANGUAGE_FILTERS.find((language) => language.code === term.language);
-      const genre = genres[index % Math.max(genres.length, 1)] || null;
-      const upvotes = 180 + ((index * 37) % 920);
+  const fetchSavedWords = useCallback(async () => {
+    setLoadingSaved(true);
+    try {
+      const { data } = await axios.get(`${BASE_URL}${API_ENDPOINTS.DICTIONARY_SAVED}`, { withCredentials: true });
+      setSavedTerms(Array.isArray(data) ? data : []);
+    } catch {
+      setSavedTerms([]);
+    } finally {
+      setLoadingSaved(false);
+    }
+  }, []);
 
+  const handleViewModeChange = (mode) => {
+    setViewMode(mode);
+    if (mode === 'saved' && savedTerms.length === 0) {
+      fetchSavedWords();
+    }
+  };
+
+  const handleSaveToggle = useCallback((wordId, isSaved) => {
+    if (!isSaved) {
+      setSavedTerms((prev) => prev.filter((t) => t.id !== wordId));
+    }
+    // re-fetch saved list next time it's opened
+  }, []);
+
+  const enrichTerms = useCallback((terms) =>
+    terms.map((term) => {
+      const languageMeta = LANGUAGE_FILTERS.find((l) => l.code === term.language);
       return {
         ...term,
         displayLanguage: term.language_display || languageMeta?.label || term.language,
         languageCode: term.language,
-        upvotes,
-        genreLabel: genre?.display_name || null,
-        lyricContext: buildLyricContext(term.word, term.language_display || languageMeta?.label || term.language, term.meaning),
       };
-    });
-  }, [genres, wikiTerms]);
+    }), []);
+
+  const allEnriched = useMemo(() => enrichTerms(wikiTerms), [enrichTerms, wikiTerms]);
+  const savedEnriched = useMemo(() => enrichTerms(savedTerms), [enrichTerms, savedTerms]);
+
+  const sourceTerms = viewMode === 'saved' ? savedEnriched : allEnriched;
 
   const filteredTerms = useMemo(() => {
-    return termsWithUiData.filter((term) => {
+    return sourceTerms.filter((term) => {
       const matchesSearch =
+        !searchQuery ||
         term.word.toLowerCase().includes(searchQuery.toLowerCase()) ||
         term.meaning.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesLang = term.languageCode === activeLang;
+      const matchesLang = viewMode === 'saved' ? true : term.languageCode === activeLang;
       return matchesSearch && matchesLang;
     });
-  }, [activeLang, searchQuery, termsWithUiData]);
-
-  const activeLanguageLabel =
-    LANGUAGE_FILTERS.find((language) => language.code === activeLang)?.label || activeLang;
+  }, [activeLang, searchQuery, sourceTerms, viewMode]);
 
   return (
     <div className="min-h-screen bg-[#fafafa] selection:bg-pink-100 selection:text-pink-900 font-sans pb-24 relative flex flex-col">
@@ -99,19 +383,20 @@ export default function LyricWiki() {
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12 w-full">
+        {/* Page header */}
         <div className="flex flex-col items-center text-center mb-12">
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-pink-50 border border-pink-100 text-pink-700 text-sm font-semibold mb-6 shadow-sm">
             <BookOpen size={16} />
             <span>Community Dictionary</span>
           </div>
-
           <h1 className="text-4xl md:text-5xl font-extrabold text-slate-900 tracking-tight mb-6">
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-pink-500 to-violet-500">LyricWiki</span>
           </h1>
           <p className="text-lg text-slate-500 max-w-2xl mb-10">
-            Discover the cultural meanings, slang behind the lyrics. Created by songwriters, for the world.
+            Discover cultural meanings and context behind lyrics — contributed by the community, for the world.
           </p>
 
+          {/* Search */}
           <div className="w-full max-w-3xl">
             <div className="relative flex-grow group">
               <div className="absolute inset-y-0 left-0 pl-5 flex items-center pointer-events-none">
@@ -119,37 +404,66 @@ export default function LyricWiki() {
               </div>
               <input
                 type="text"
-                placeholder="Search for a word, phrase, or meaning..."
+                placeholder="Search for a word, phrase, or meaning…"
                 value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full pl-12 pr-6 py-4 bg-white/80 backdrop-blur-xl border border-slate-200/80 rounded-2xl text-base text-slate-900 placeholder-slate-400 shadow-md shadow-pink-100/20 focus:outline-none focus:ring-2 focus:ring-pink-500/20 focus:border-pink-500 transition-all duration-300"
               />
             </div>
           </div>
         </div>
 
-        <div className="mb-8 overflow-x-auto pb-2">
-          <div className="flex min-w-max items-center gap-3">
-            <span className="text-sm font-bold text-slate-400 uppercase tracking-wider mr-2 flex items-center gap-2">
-              <Globe2 size={16} /> Filter by Language:
-            </span>
-            {LANGUAGE_FILTERS.map((language) => (
-              <button
-                key={language.code}
-                onClick={() => setActiveLang(language.code)}
-                className={`px-5 py-2 rounded-full text-sm font-bold transition-all duration-200 ${
-                  activeLang === language.code
-                    ? 'bg-pink-500 text-white shadow-md shadow-pink-200 transform scale-105'
-                    : 'bg-white border border-slate-200 text-slate-600 hover:border-pink-300 hover:text-pink-600 hover:bg-pink-50/50'
-                }`}
-              >
-                {language.label}
-              </button>
-            ))}
+        {/* View mode tabs + language filter */}
+        <div className="flex flex-col gap-4 mb-8">
+          {/* Tabs */}
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleViewModeChange('all')}
+              className={`px-5 py-2 rounded-full text-sm font-bold transition-all duration-200 ${
+                viewMode === 'all'
+                  ? 'bg-pink-500 text-white shadow-md shadow-pink-200'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:border-pink-300 hover:text-pink-600 hover:bg-pink-50/50'
+              }`}
+            >
+              All Words
+            </button>
+            <button
+              onClick={() => handleViewModeChange('saved')}
+              className={`flex items-center gap-2 px-5 py-2 rounded-full text-sm font-bold transition-all duration-200 ${
+                viewMode === 'saved'
+                  ? 'bg-violet-500 text-white shadow-md shadow-violet-200'
+                  : 'bg-white border border-slate-200 text-slate-600 hover:border-violet-300 hover:text-violet-600 hover:bg-violet-50/50'
+              }`}
+            >
+              <Bookmark size={14} />
+              Saved Words
+            </button>
           </div>
-        </div>
 
-    
+          {/* Language filter — only in "all" mode */}
+          {viewMode === 'all' && (
+            <div className="overflow-x-auto pb-2">
+              <div className="flex min-w-max items-center gap-3">
+                <span className="text-sm font-bold text-slate-400 uppercase tracking-wider mr-2 flex items-center gap-2">
+                  <Globe2 size={16} /> Filter by Language:
+                </span>
+                {LANGUAGE_FILTERS.map((language) => (
+                  <button
+                    key={language.code}
+                    onClick={() => setActiveLang(language.code)}
+                    className={`px-5 py-2 rounded-full text-sm font-bold transition-all duration-200 ${
+                      activeLang === language.code
+                        ? 'bg-pink-500 text-white shadow-md shadow-pink-200 transform scale-105'
+                        : 'bg-white border border-slate-200 text-slate-600 hover:border-pink-300 hover:text-pink-600 hover:bg-pink-50/50'
+                    }`}
+                  >
+                    {language.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
 
         {fetchError && (
           <div className="mb-8 rounded-2xl border border-red-200 bg-red-50 px-5 py-4 text-sm font-medium text-red-700">
@@ -157,7 +471,8 @@ export default function LyricWiki() {
           </div>
         )}
 
-        {loading ? (
+        {/* Word grid */}
+        {loading || (viewMode === 'saved' && loadingSaved) ? (
           <div className="py-24 flex items-center justify-center text-slate-500">
             <LoaderCircle size={24} className="animate-spin" />
           </div>
@@ -166,73 +481,34 @@ export default function LyricWiki() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {filteredTerms.length > 0 ? (
                 filteredTerms.map((item) => (
-                  <div key={item.id} className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-[2rem] p-6 sm:p-8 shadow-sm hover:shadow-xl hover:shadow-pink-100/40 hover:border-pink-200/60 transition-all duration-300 flex flex-col group">
-                    <div className="flex justify-between items-start mb-4 gap-3">
-                      <div>
-                        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight flex items-baseline gap-3">
-                          {item.word}
-                          <span className="text-sm font-medium text-slate-400 font-serif tracking-normal">
-                           
-                          </span>
-                        </h2>
-                      </div>
-                      <span className={`text-xs font-bold px-3 py-1.5 rounded-full ${LANGUAGE_TINT[item.languageCode] || 'bg-pink-50 text-pink-700 border border-pink-100'}`}>
-                        {item.displayLanguage}
-                      </span>
-                    </div>
-                   
-                    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-1 mb-6 relative overflow-hidden">
-                      <Quote size={80} className="absolute -top-4 -left-4 text-slate-100 rotate-180" />
-                      <div className="relative z-10">
-                        <p className="text-slate-700 font-medium italic mb-3">
-                          {item.meaning}
-                        </p>
-                       
-                      </div>
-                    </div>
-
-                    <div className="border-t border-slate-100 pt-4 flex justify-between items-center mt-auto">
-                      <div className="flex items-center gap-2">
-                        <div className="w-8 h-8 bg-gradient-to-br from-pink-200 to-violet-200 rounded-full flex items-center justify-center text-pink-700 font-bold text-xs">
-                          L
-                        </div>
-                        <span className="text-sm font-medium text-slate-500">LyricsVerse</span>
-                      </div>
-
-                      <div className="flex gap-2">
-                        <button
-                          type="button"
-                          className="flex items-center gap-1.5 bg-slate-50 hover:bg-pink-50 border border-slate-200 hover:border-pink-200 text-slate-600 hover:text-pink-600 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors"
-                        >
-                          <ThumbsUp size={16} />
-                          {item.upvotes}
-                        </button>
-                        <button
-                          type="button"
-                          className="flex items-center gap-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 text-slate-600 px-3 py-1.5 rounded-lg text-sm font-bold transition-colors"
-                        >
-                          <MessageSquare size={16} />
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+                  <WordCard key={item.id} item={item} onSaveToggle={handleSaveToggle} />
                 ))
               ) : (
                 <div className="col-span-full py-20 flex flex-col items-center justify-center text-center border-2 border-dashed border-pink-200 rounded-[2rem] bg-pink-50/30 backdrop-blur-sm">
                   <div className="w-20 h-20 bg-white rounded-full flex items-center justify-center mb-6 shadow-sm border border-pink-100">
-                    <Search size={32} className="text-pink-400" />
+                    {viewMode === 'saved' ? (
+                      <Bookmark size={32} className="text-violet-400" />
+                    ) : (
+                      <Search size={32} className="text-pink-400" />
+                    )}
                   </div>
-                  <h3 className="text-2xl font-extrabold text-slate-900 mb-2">No terms found</h3>
+                  <h3 className="text-2xl font-extrabold text-slate-900 mb-2">
+                    {viewMode === 'saved' ? 'No saved words yet' : 'No terms found'}
+                  </h3>
                   <p className="text-slate-500 max-w-md mb-6">
-                    We couldn&apos;t find any imported dictionary terms for this language and search combination yet.
+                    {viewMode === 'saved'
+                      ? 'Bookmark words from the dictionary to find them here later.'
+                      : "We couldn't find any terms for this combination."}
                   </p>
-                  <button
-                    type="button"
-                    onClick={() => setSearchQuery('')}
-                    className="flex items-center gap-2 bg-pink-600 text-white hover:bg-pink-700 px-6 py-3 rounded-xl font-bold transition-colors shadow-md shadow-pink-200"
-                  >
-                    <Sparkles size={18} /> Clear Search
-                  </button>
+                  {viewMode === 'all' && searchQuery && (
+                    <button
+                      type="button"
+                      onClick={() => setSearchQuery('')}
+                      className="flex items-center gap-2 bg-pink-600 text-white hover:bg-pink-700 px-6 py-3 rounded-xl font-bold transition-colors shadow-md shadow-pink-200"
+                    >
+                      <Sparkles size={18} /> Clear Search
+                    </button>
+                  )}
                 </div>
               )}
             </div>
