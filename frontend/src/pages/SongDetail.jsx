@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Heart,
@@ -20,11 +20,13 @@ import {
   CalendarDays,
   Languages,
 } from 'lucide-react';
-import { BASE_URL, LANGUAGES } from '../utils/constants';
+import { useToast } from '../components/Toast.jsx';
+import { API_ENDPOINTS, BASE_URL, LANGUAGES } from '../utils/constants';
 
-function AnimatedTranslateButton({ label, fullWidth = false }) {
+function AnimatedTranslateButton({ label, fullWidth = false, onClick }) {
   return (
     <button
+      onClick={onClick}
       className={`group relative inline-flex items-center justify-center gap-2 overflow-hidden rounded-xl border border-indigo-200 bg-gradient-to-r from-indigo-500 via-violet-500 to-indigo-600 px-4 py-2.5 text-sm font-bold text-white shadow-md shadow-indigo-200/70 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg hover:shadow-indigo-300/70 ${fullWidth ? 'w-full' : ''}`}
     >
       <span className="absolute inset-0 -translate-x-full bg-gradient-to-r from-transparent via-white/35 to-transparent transition-transform duration-700 group-hover:translate-x-full" />
@@ -36,16 +38,18 @@ function AnimatedTranslateButton({ label, fullWidth = false }) {
 
 export default function SongDetail() {
   const { id } = useParams();
+  const navigate = useNavigate();
   const isLabelSong = window.location.pathname.startsWith('/label-song/');
+  const { addToast } = useToast();
 
   const [activeLang, setActiveLang] = useState('original');
   const [isFavorite, setIsFavorite] = useState(false);
-  const [isLiked, setIsLiked] = useState(false);
-  const [userRating, setUserRating] = useState(0);
   const [songData, setSongData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState('');
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const [favoriteLoading, setFavoriteLoading] = useState(false);
+  const [likeLoading, setLikeLoading] = useState(false);
 
   useEffect(() => {
     const fetchSong = async () => {
@@ -63,6 +67,7 @@ export default function SongDetail() {
 
         const data = await response.json();
         setSongData(data);
+        setIsFavorite(Boolean(data.is_favorite));
       } catch (error) {
         console.error('Error fetching song detail:', error);
         setFetchError(error.message || 'Unable to load this song right now.');
@@ -88,14 +93,14 @@ export default function SongDetail() {
       languageLabel: songData.original_language_display || songData.original_language || 'Unknown Language',
       authorLabel: songData.author_username || songData.label_account_username || 'Unknown Author',
       ratingValue: Number(songData.rating) || 0,
-      likes: Math.max(Math.round((Number(songData.rating) || 0) * 248), 0),
+      likes: Number(songData.likes) || 0,
       coverColor: ['from-indigo-500 to-violet-600', 'from-sky-500 to-indigo-600', 'from-amber-500 to-orange-600'][Number(songData.id) % 3],
       createdLabel:
         createdAt && !Number.isNaN(createdAt.getTime())
           ? createdAt.toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })
           : 'Recently added',
       aboutText: songData.original_lyrics
-        ? `Written by ${songData.author_username || songData.label_account_username || 'the community'} in ${songData.original_language_display || songData.original_language || 'its original language'}, this entry is available in Lyricsverse with its complete original lyrics and verification status.`
+        ? `Written by ${songData.author_username || songData.label_account_username || 'the community'} in ${songData.original_language_display || songData.original_language || 'its original language'}, this song is available on Lyricsverse with its  original lyrics and verification status.`
         : `Written by ${songData.author_username || songData.label_account_username || 'the community'}, this song is available in Lyricsverse and ready for contributors to expand with richer translations and annotations.`,
     };
   }, [songData]);
@@ -191,6 +196,68 @@ export default function SongDetail() {
     window.speechSynthesis.speak(utterance);
   };
 
+  const handleFavoriteToggle = async () => {
+    try {
+      setFavoriteLoading(true);
+      const endpoint = isLabelSong
+        ? API_ENDPOINTS.LABEL_SONG_FAVORITE(id)
+        : API_ENDPOINTS.SONG_FAVORITE(id);
+      const response = await fetch(`${BASE_URL}${endpoint}`, {
+        method: isFavorite ? 'DELETE' : 'POST',
+        credentials: 'include',
+      });
+
+      if (response.status === 401) {
+        window.location.href = '/login';
+        return;
+      }
+
+      if (!response.ok) {
+        throw new Error('Unable to update favorite status right now.');
+      }
+
+      const nextValue = !isFavorite;
+      setIsFavorite(nextValue);
+      setSongData((currentSong) =>
+        currentSong ? { ...currentSong, is_favorite: nextValue } : currentSong
+      );
+      addToast({
+        title: nextValue ? 'Added to favorites' : 'Removed from favorites',
+        description: `${normalizedSong?.title || 'This song'} ${nextValue ? 'was added to' : 'was removed from'} your favorites.`,
+      });
+    } catch (error) {
+      console.error('Favorite update failed:', error);
+    } finally {
+      setFavoriteLoading(false);
+    }
+  };
+
+  const handleLike = async () => {
+    try {
+      setLikeLoading(true);
+      const endpoint = isLabelSong
+        ? API_ENDPOINTS.LABEL_SONG_LIKE(id)
+        : API_ENDPOINTS.SONG_LIKE(id);
+      const response = await fetch(`${BASE_URL}${endpoint}`, {
+        method: 'POST',
+        credentials: 'include',
+      });
+
+      if (!response.ok) {
+        throw new Error('Unable to update likes right now.');
+      }
+
+      const data = await response.json();
+      setSongData((currentSong) =>
+        currentSong ? { ...currentSong, likes: Number(data.likes) || currentSong.likes } : currentSong
+      );
+    } catch (error) {
+      console.error('Like update failed:', error);
+    } finally {
+      setLikeLoading(false);
+    }
+  };
+
   useEffect(() => {
     return () => {
       window.speechSynthesis?.cancel();
@@ -260,8 +327,9 @@ export default function SongDetail() {
           </Link>
           <div className="flex items-center gap-3">
             <button
-              onClick={() => setIsFavorite(!isFavorite)}
-              className={`p-2 rounded-full transition-all ${isFavorite ? 'bg-red-50 text-red-500' : 'bg-slate-100 text-slate-400 hover:text-red-500'}`}
+              onClick={handleFavoriteToggle}
+              disabled={favoriteLoading}
+              className={`p-2 rounded-full transition-all ${isFavorite ? 'bg-red-50 text-red-500' : 'bg-slate-100 text-slate-400 hover:text-red-500'} ${favoriteLoading ? 'cursor-wait opacity-60' : ''}`}
             >
               <Heart size={20} className={isFavorite ? 'fill-current' : ''} />
             </button>
@@ -313,11 +381,12 @@ export default function SongDetail() {
 
             <div className="flex flex-wrap items-center justify-center md:justify-start gap-6 border-t border-slate-100 pt-6 mt-auto">
               <button
-                onClick={() => setIsLiked(!isLiked)}
-                className={`flex items-center gap-2 font-bold transition-colors ${isLiked ? 'text-indigo-600' : 'text-slate-500 hover:text-slate-900'}`}
+                onClick={handleLike}
+                disabled={likeLoading}
+                className={`flex items-center gap-2 font-bold transition-colors text-slate-500 hover:text-slate-900 ${likeLoading ? 'cursor-wait opacity-60' : ''}`}
               >
-                <ThumbsUp size={20} className={isLiked ? 'fill-current' : ''} />
-                {isLiked ? normalizedSong.likes + 1 : normalizedSong.likes}
+                <ThumbsUp size={20} />
+                {normalizedSong.likes}
               </button>
 
               <div className="flex items-center gap-2">
@@ -326,12 +395,11 @@ export default function SongDetail() {
                     <Star
                       key={star}
                       size={20}
-                      className={`cursor-pointer transition-colors ${star <= (userRating || Math.round(normalizedSong.ratingValue)) ? 'text-yellow-400 fill-current' : 'text-slate-300 hover:text-yellow-200'}`}
-                      onClick={() => setUserRating(star)}
+                      className={star <= Math.round(normalizedSong.ratingValue) ? 'text-yellow-400 fill-current' : 'text-slate-300'}
                     />
                   ))}
                 </div>
-                <span className="text-sm font-bold text-slate-600">{userRating || normalizedSong.ratingValue || 'N/A'}</span>
+                <span className="text-sm font-bold text-slate-600">{normalizedSong.ratingValue || 'N/A'}</span>
               </div>
             </div>
           </div>
@@ -482,12 +550,16 @@ export default function SongDetail() {
 
             <div className="bg-gradient-to-br from-indigo-600 to-violet-700 rounded-3xl p-6 shadow-lg text-white relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10" />
-              <h3 className="text-lg font-extrabold mb-2 relative z-10">Notice a mistake?</h3>
+              <h3 className="text-lg font-extrabold mb-2 relative z-10">Loved the Song Lyrics ?</h3>
               <p className="text-indigo-100 text-sm mb-4 relative z-10 leading-relaxed">
                 Lyricsverse is built by songwriters like you. Help us improve these lyrics by suggesting an edit.
               </p>
               <div className="relative z-10">
-                <AnimatedTranslateButton label="Become a Contributor" fullWidth />
+                <AnimatedTranslateButton
+                  label="Explore more with Lyricsverse"
+                  fullWidth
+                  onClick={() => navigate('/explore')}
+                />
               </div>
             </div>
           </div>

@@ -17,9 +17,11 @@ import {
   Star,
   Clock3,
   CheckCircle2,
+  Heart,
 } from 'lucide-react';
 import axios from 'axios';
 import Navbar from '../components/Navbar';
+import { useToast } from '../components/Toast.jsx';
 import { API_ENDPOINTS, BASE_URL, LANGUAGES } from '../utils/constants';
 
 const STATUS_STYLES = {
@@ -41,6 +43,7 @@ const languageLabelMap = LANGUAGES.reduce((acc, language) => {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { addToast } = useToast();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [activeTab, setActiveTab] = useState('All');
@@ -48,6 +51,7 @@ export default function Dashboard() {
   const [songToDelete, setSongToDelete] = useState(null);
   const [user, setUser] = useState(null);
   const [songs, setSongs] = useState([]);
+  const [favorites, setFavorites] = useState([]);
   const [loading, setLoading] = useState(true);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const [fetchError, setFetchError] = useState('');
@@ -58,13 +62,15 @@ export default function Dashboard() {
         setLoading(true);
         setFetchError('');
 
-        const [profileResponse, songsResponse] = await Promise.all([
+        const [profileResponse, songsResponse, favoritesResponse] = await Promise.all([
           axios.get(BASE_URL + API_ENDPOINTS.PROFILE, { withCredentials: true }),
           axios.get(BASE_URL + API_ENDPOINTS.MY_SONGS, { withCredentials: true }),
+          axios.get(BASE_URL + API_ENDPOINTS.FAVORITES, { withCredentials: true }),
         ]);
 
         setUser(profileResponse.data);
         setSongs(songsResponse.data);
+        setFavorites(Array.isArray(favoritesResponse.data) ? favoritesResponse.data : []);
       } catch (error) {
         console.error('Error fetching dashboard data:', error);
 
@@ -140,15 +146,35 @@ export default function Dashboard() {
     });
   }, [songs]);
 
-  const filteredSongs = useMemo(() => {
-    return normalizedSongs.filter((song) => {
+  const normalizedFavorites = useMemo(() => {
+    return favorites.map((favorite) => ({
+      id: `favorite-${favorite.id}`,
+      favoriteId: favorite.id,
+      sourceId: favorite.source_id,
+      title: favorite.song_title || 'Untitled Song',
+      artist: favorite.artist_name || 'Unknown artist',
+      originalLang: favorite.original_language_display || languageLabelMap[favorite.original_language] || favorite.original_language || 'Unknown',
+      status: 'Favorite',
+      genre: favorite.genre_display || favorite.genre || 'Unknown Genre',
+      ownerType: favorite.owner_type || 'Lyricsverse',
+      route: favorite.route || '/explore',
+      isLabelSong: Boolean(favorite.is_label_song),
+    }));
+  }, [favorites]);
+
+  const filteredItems = useMemo(() => {
+    const sourceItems = activeTab === 'Favourites' ? normalizedFavorites : normalizedSongs;
+
+    return sourceItems.filter((item) => {
       const matchesSearch =
-        song.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        song.originalLang.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesTab = activeTab === 'All' || song.status === activeTab;
+        item.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        item.originalLang.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.artist || '').toLowerCase().includes(searchQuery.toLowerCase());
+      const matchesTab =
+        activeTab === 'Favourites' || activeTab === 'All' || item.status === activeTab;
       return matchesSearch && matchesTab;
     });
-  }, [activeTab, normalizedSongs, searchQuery]);
+  }, [activeTab, normalizedFavorites, normalizedSongs, searchQuery]);
 
   const dashboardStats = useMemo(() => {
     const publishedCount = normalizedSongs.filter((song) => song.status === 'Published').length;
@@ -159,15 +185,33 @@ export default function Dashboard() {
 
     return [
       { label: 'Total Songs', value: normalizedSongs.length, icon: Music, color: 'text-indigo-600', bg: 'bg-indigo-50' },
+      { label: 'Favorites', value: normalizedFavorites.length, icon: Heart, color: 'text-pink-600', bg: 'bg-pink-50' },
       { label: 'Open for Annotation', value: pendingCount, icon: Clock3, color: 'text-sky-600', bg: 'bg-sky-50' },
       { label: 'Published', value: publishedCount, icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50' },
       { label: 'Rating', value: averageRating, icon: Star, color: 'text-amber-600', bg: 'bg-amber-50' },
     ];
-  }, [normalizedSongs]);
+  }, [normalizedFavorites.length, normalizedSongs]);
 
   const preferredLanguageLabel = languageLabelMap[user?.preferred_language] || user?.preferred_language || 'Not set';
   const publishedSongsCount = normalizedSongs.filter((song) => song.status === 'Published').length;
   const userRating = Number(user?.rating) || 0;
+
+  const handleRemoveFavorite = async (favorite) => {
+    try {
+      const endpoint = favorite.isLabelSong
+        ? API_ENDPOINTS.LABEL_SONG_FAVORITE(favorite.sourceId)
+        : API_ENDPOINTS.SONG_FAVORITE(favorite.sourceId);
+      await axios.delete(`${BASE_URL}${endpoint}`, { withCredentials: true });
+      setFavorites((currentFavorites) => currentFavorites.filter((item) => item.id !== favorite.favoriteId));
+      addToast({
+        title: 'Removed from favorites',
+        description: `${favorite.title} has been removed from your favorites.`,
+      });
+    } catch (error) {
+      console.error('Failed to remove favorite:', error);
+      setFetchError('Could not update favorites right now.');
+    }
+  };
 
   return (
     <div className="min-h-screen bg-[#fafafa] selection:bg-indigo-100 selection:text-indigo-900 font-sans pb-20 relative">
@@ -261,7 +305,7 @@ export default function Dashboard() {
           </div>
 
           <div className="xl:col-span-8 grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-            {(loading ? Array.from({ length: 5 }) : dashboardStats).map((stat, index) =>
+            {(loading ? Array.from({ length: 5 }) : dashboardStats).slice(0, 5).map((stat, index) =>
               loading ? (
                 <div key={index} className="bg-white border border-slate-200/60 rounded-2xl p-6 shadow-sm animate-pulse">
                   <div className="h-12 w-12 rounded-full bg-slate-200 mb-4" />
@@ -283,26 +327,41 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="bg-white border border-slate-200/60 rounded-2xl p-2 sm:p-4 shadow-sm mb-8 flex flex-col sm:flex-row gap-4 justify-between items-center sticky top-24 z-30 backdrop-blur-xl bg-white/80">
-          <div className="flex bg-slate-100/80 p-1 rounded-xl w-full sm:w-auto overflow-x-auto">
-            {['All', 'Published', 'Open for Annotation', 'Draft'].map((tab) => (
-              <button
-                key={tab}
-                onClick={() => setActiveTab(tab)}
-                className={`flex-1 sm:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === tab ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
-              >
-                {tab}
-              </button>
-            ))}
+        <div className="bg-white border border-slate-200/60 rounded-2xl p-2 sm:p-4 shadow-sm mb-8 flex flex-col lg:flex-row gap-4 justify-between items-stretch lg:items-center sticky top-24 z-30 backdrop-blur-xl bg-white/80">
+          <div className="flex flex-col md:flex-row gap-3 md:items-center w-full lg:w-auto">
+            <div className="flex bg-slate-100/80 p-1 rounded-xl w-full md:w-auto overflow-x-auto">
+              {['All', 'Published', 'Open for Annotation', 'Draft'].map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setActiveTab(tab)}
+                  className={`flex-1 sm:flex-none px-6 py-2 rounded-lg text-sm font-bold transition-all ${activeTab === tab ? 'bg-white text-indigo-600 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+                >
+                  {tab}
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('Favourites')}
+              className={`inline-flex items-center justify-center gap-2 rounded-xl border px-4 py-3 text-sm font-bold transition-all ${
+                activeTab === 'Favourites'
+                  ? 'border-pink-200 bg-pink-50 text-pink-700 shadow-sm'
+                  : 'border-slate-200 bg-white text-slate-600 hover:border-pink-200 hover:bg-pink-50/70 hover:text-pink-700'
+              }`}
+            >
+              <Heart size={16} className={activeTab === 'Favourites' ? 'fill-current' : ''} />
+              Favourites
+            </button>
           </div>
 
-          <div className="relative w-full sm:w-72">
+          <div className="relative w-full sm:w-72 lg:w-80">
             <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
               <Search size={16} className="text-slate-400" />
             </div>
             <input
               type="text"
-              placeholder="Search your songs..."
+              placeholder={activeTab === 'Favourites' ? 'Search favorite songs...' : 'Search your songs...'}
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-xl text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600 focus:bg-white transition-all"
@@ -323,46 +382,59 @@ export default function Dashboard() {
                 <div className="h-24 rounded-2xl bg-slate-100" />
               </div>
             ))
-          ) : filteredSongs.length > 0 ? (
-            filteredSongs.map((song) => (
+          ) : filteredItems.length > 0 ? (
+            filteredItems.map((song) => (
               <div key={song.id} className="group bg-white border border-slate-200/60 rounded-2xl p-6 shadow-sm hover:shadow-xl hover:border-indigo-100 transition-all duration-300 flex flex-col">
                 <div className="flex justify-between items-start mb-4">
-                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${STATUS_STYLES[song.status] || STATUS_STYLES.Draft}`}>
+                  <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-bold uppercase tracking-wider ${song.status === 'Favorite' ? 'bg-pink-50 text-pink-700 border border-pink-200/70' : STATUS_STYLES[song.status] || STATUS_STYLES.Draft}`}>
                     {song.status}
                   </span>
 
-                  <div className="relative">
-                    <button className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors">
-                      <MoreVertical size={18} />
+                  {activeTab === 'Favourites' ? (
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveFavorite(song)}
+                      className="inline-flex items-center gap-1.5 rounded-lg bg-pink-50 px-3 py-1.5 text-sm font-bold text-pink-600 transition-colors hover:bg-pink-100"
+                    >
+                      <Trash2 size={15} />
+              
                     </button>
-                    <div className="absolute right-0 mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-20 overflow-hidden origin-top-right transform scale-95 group-hover:scale-100">
-                      <button
-                        onClick={() => navigate(`/contribute?songId=${song.id}`)}
-                        disabled={song.status === 'Published'}
-                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 font-medium transition-colors disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent disabled:hover:text-slate-300"
-                      >
-                        <Edit3 size={14} /> {song.status === 'Published' ? 'Locked' : 'Edit'}
+                  ) : (
+                    <div className="relative">
+                      <button className="p-1.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors">
+                        <MoreVertical size={18} />
                       </button>
-                      {song.status === 'Published' && (
-                        <button className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 font-medium transition-colors">
-                          <Share2 size={14} /> Share
+                      <div className="absolute right-0 mt-1 w-36 bg-white border border-slate-200 rounded-xl shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-200 z-20 overflow-hidden origin-top-right transform scale-95 group-hover:scale-100">
+                        <button
+                          onClick={() => navigate(`/contribute?songId=${song.id}`)}
+                          disabled={song.status === 'Published'}
+                          className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 font-medium transition-colors disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-transparent disabled:hover:text-slate-300"
+                        >
+                          <Edit3 size={14} /> {song.status === 'Published' ? 'Locked' : 'Edit'}
                         </button>
-                      )}
-                      <div className="border-t border-slate-100" />
-                      <button
-                        onClick={() => openDeleteDialog(song)}
-                        className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 font-medium transition-colors"
-                      >
-                        <Trash2 size={14} /> Delete
-                      </button>
+                        {song.status === 'Published' && (
+                          <button className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-slate-600 hover:bg-slate-50 hover:text-indigo-600 font-medium transition-colors">
+                            <Share2 size={14} /> Share
+                          </button>
+                        )}
+                        <div className="border-t border-slate-100" />
+                        <button
+                          onClick={() => openDeleteDialog(song)}
+                          className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 font-medium transition-colors"
+                        >
+                          <Trash2 size={14} /> Delete
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  )}
                 </div>
 
-                <div className="flex-grow cursor-pointer" onClick={() => navigate(`/song/${song.id}`)}>
+                <div className="flex-grow cursor-pointer" onClick={() => navigate(activeTab === 'Favourites' ? song.route : `/song/${song.id}`)}>
                   <h3 className="text-xl font-extrabold text-slate-900 mb-2 group-hover:text-indigo-600 transition-colors line-clamp-1">{song.title}</h3>
                   <p className="text-sm text-slate-500 mb-5 line-clamp-3">
-                    {song.lyricsPreview || 'No lyrics added yet. Open this song to continue writing.'}
+                    {activeTab === 'Favourites'
+                      ? `${song.artist} • ${song.ownerType}`
+                      : song.lyricsPreview || 'No lyrics added yet. Open this song to continue writing.'}
                   </p>
 
                   <div className="flex flex-wrap gap-2 mb-6">
@@ -374,6 +446,12 @@ export default function Dashboard() {
                       <BookOpen size={12} className="text-sky-500" />
                       {song.originalLang}
                     </div>
+                    {activeTab === 'Favourites' && (
+                      <div className="flex items-center gap-1.5 bg-pink-50 border border-pink-100 px-2.5 py-1 rounded-md text-xs font-semibold text-pink-700">
+                        <Heart size={12} className="text-pink-500 fill-current" />
+                        {song.ownerType}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -394,9 +472,11 @@ export default function Dashboard() {
               <h3 className="text-lg font-bold text-slate-900 mb-2">No songs found</h3>
               <p className="text-slate-500 text-sm max-w-sm">
                 {searchQuery
-                  ? "We couldn't find any songs matching your search."
+                  ? `We couldn't find any ${activeTab === 'Favourites' ? 'favorite songs' : 'songs'} matching your search.`
                   : activeTab === 'All'
                     ? "You haven't created any songs yet. Start writing your first masterpiece."
+                    : activeTab === 'Favourites'
+                      ? "You haven't saved any favorite songs yet. Add them from Explore."
                     : `You don't have any ${activeTab.toLowerCase()} songs right now.`}
               </p>
             </div>

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
     Search,
@@ -9,19 +9,23 @@ import {
     TrendingUp,
     Sparkles,
     Music,
+    ThumbsUp,
     ChevronRight
 } from 'lucide-react';
 import Navbar from '../components/Navbar';
+import { useToast } from '../components/Toast.jsx';
 import { API_ENDPOINTS, BASE_URL } from '../utils/constants';
 
 export default function Explore() {
     const navigate = useNavigate();
+    const { addToast } = useToast();
 
     // State for search and filters
     const [searchQuery, setSearchQuery] = useState('');
     const [activeLanguage, setActiveLanguage] = useState('All');
     const [activeGenre, setActiveGenre] = useState('All');
     const [activeOwner, setActiveOwner] = useState('All');
+    const [sortOrder, setSortOrder] = useState('newest');
 
     const [languages, setLanguages] = useState(['All']);
     const [genres, setGenres] = useState(['All']);
@@ -29,6 +33,8 @@ export default function Explore() {
     const [allSongs, setAllSongs] = useState([]);
     const [loading, setLoading] = useState(true);
     const [fetchError, setFetchError] = useState('');
+    const [favoriteLoadingId, setFavoriteLoadingId] = useState(null);
+    const [likeLoadingId, setLikeLoadingId] = useState(null);
 
     useEffect(() => {
         const fetchData = async () => {
@@ -83,9 +89,13 @@ export default function Explore() {
                         genre: song.genre_display ?? song.genre ?? 'Unknown',
                         originalLang: song.original_language_display ?? song.original_language ?? 'Unknown',
                         translatedTo: [],
-                        likes: Number(song.rating) || 0,
+                        likes: Number(song.likes) || 0,
                         annotations: song.can_annotate ? 1 : 0,
                         owner: song.owner_type ?? 'Independent Songwriters',
+                        sourceType: 'song',
+                        sourceId: song.id,
+                        isFavorite: Boolean(song.is_favorite),
+                        createdAt: song.created_at,
                         color: palette[index % palette.length],
                         status: song.status,
                         statusLabel:
@@ -106,9 +116,13 @@ export default function Explore() {
                         genre: song.genre_display ?? song.genre ?? 'Unknown',
                         originalLang: song.original_language_display ?? song.original_language ?? 'Unknown',
                         translatedTo: [],
-                        likes: Number(song.rating) || 0,
+                        likes: Number(song.likes) || 0,
                         annotations: 0,
                         owner: 'Label Verified',
+                        sourceType: 'label-song',
+                        sourceId: song.id,
+                        isFavorite: Boolean(song.is_favorite),
+                        createdAt: song.created_at,
                         color: palette[(index + visibleCommunitySongs.length) % palette.length],
                         status: 'PUBLISHED',
                         statusLabel: 'Published',
@@ -137,29 +151,104 @@ export default function Explore() {
         fetchData();
     }, []);
 
-    // Filter Options
-    // const languages = ['All', 'Hindi', 'Marathi', 'Tamil', 'English', 'Bengali'];
-    // const genres = ['All', 'Pop', 'Folk', 'Indie', 'Acoustic', 'R&B'];
-    // const owners = ['All', 'User Contributed', 'Label Verified'];
+    const handleFavoriteToggle = async (event, song) => {
+        event.stopPropagation();
 
-    // Mock Data for the Community Songs
-    // const allSongs = [
-    //     { id: 1, title: 'Midnight Rain', artist: 'Arjun Jay', genre: 'Pop', originalLang: 'English', translatedTo: ['Hindi', 'Marathi'], likes: 1205, annotations: 14, color: 'from-blue-500 to-indigo-500' },
-    //     { id: 2, title: 'Desert Rose', artist: 'Priya Sharma', genre: 'Folk', originalLang: 'English', translatedTo: ['Marathi', 'Punjabi'], likes: 840, annotations: 8, color: 'from-amber-400 to-orange-500' },
-    //     { id: 3, title: 'Neon Lights', artist: 'The Wanderers', genre: 'Indie', originalLang: 'English', translatedTo: ['Hindi', 'Tamil'], likes: 2300, annotations: 32, color: 'from-pink-500 to-rose-500' },
-    //     { id: 4, title: 'Acoustic Heart', artist: 'David Chen', genre: 'Acoustic', originalLang: 'English', translatedTo: ['Bengali'], likes: 450, annotations: 3, color: 'from-emerald-400 to-teal-500' },
-    //     { id: 5, title: 'City Whispers', artist: 'Maya & Co.', genre: 'R&B', originalLang: 'English', translatedTo: ['Hindi', 'Marathi'], likes: 1890, annotations: 21, color: 'from-violet-500 to-fuchsia-500' },
-    //     { id: 6, title: 'Ocean Waves', artist: 'Samir', genre: 'Pop', originalLang: 'English', translatedTo: ['Tamil'], likes: 670, annotations: 5, color: 'from-cyan-400 to-blue-500' },
-    // ];
+        try {
+            setFavoriteLoadingId(song.id);
+            const endpoint =
+                song.sourceType === 'label-song'
+                    ? API_ENDPOINTS.LABEL_SONG_FAVORITE(song.sourceId)
+                    : API_ENDPOINTS.SONG_FAVORITE(song.sourceId);
+            const response = await fetch(`${BASE_URL}${endpoint}`, {
+                method: song.isFavorite ? 'DELETE' : 'POST',
+                credentials: 'include',
+            });
 
-    // Filtering Logic
-    const filteredSongs = allSongs.filter(song => {
-        const matchesSearch = song.artist.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesLang = activeLanguage === 'All' || song.originalLang === activeLanguage || song.translatedTo.includes(activeLanguage);
-        const matchesGenre = activeGenre === 'All' || song.genre === activeGenre;
-        const matchesOwner = activeOwner === 'All' || song.owner === activeOwner;
-        return matchesSearch && matchesLang && matchesGenre && matchesOwner;
-    });
+            if (response.status === 401) {
+                navigate('/login');
+                return;
+            }
+
+            if (!response.ok) {
+                throw new Error('Unable to update favorites right now.');
+            }
+
+            setAllSongs((currentSongs) =>
+                currentSongs.map((currentSong) =>
+                    currentSong.id === song.id
+                        ? { ...currentSong, isFavorite: !song.isFavorite }
+                        : currentSong
+                )
+            );
+            addToast({
+                title: song.isFavorite ? 'Removed from favorites' : 'Added to favorites',
+                description: song.isFavorite
+                    ? `${song.title} was removed from your favorites.`
+                    : `${song.title} was added to your favorites.`,
+            });
+        } catch (error) {
+            console.error('Error updating favorite:', error);
+            setFetchError(error.message || 'Unable to update favorites right now.');
+        } finally {
+            setFavoriteLoadingId(null);
+        }
+    };
+
+    const handleLike = async (event, song) => {
+        event.stopPropagation();
+
+        try {
+            setLikeLoadingId(song.id);
+            const endpoint =
+                song.sourceType === 'label-song'
+                    ? API_ENDPOINTS.LABEL_SONG_LIKE(song.sourceId)
+                    : API_ENDPOINTS.SONG_LIKE(song.sourceId);
+            const response = await fetch(`${BASE_URL}${endpoint}`, {
+                method: 'POST',
+                credentials: 'include',
+            });
+
+            if (!response.ok) {
+                throw new Error('Unable to like this song right now.');
+            }
+
+            const data = await response.json();
+            setAllSongs((currentSongs) =>
+                currentSongs.map((currentSong) =>
+                    currentSong.id === song.id
+                        ? { ...currentSong, likes: Number(data.likes) || currentSong.likes + 1 }
+                        : currentSong
+                )
+            );
+        } catch (error) {
+            console.error('Error liking song:', error);
+            setFetchError(error.message || 'Unable to like this song right now.');
+        } finally {
+            setLikeLoadingId(null);
+        }
+    };
+
+    const filteredSongs = useMemo(() => {
+        const filtered = allSongs.filter((song) => {
+            const matchesSearch =
+                song.artist.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                song.title.toLowerCase().includes(searchQuery.toLowerCase());
+            const matchesLang =
+                activeLanguage === 'All' ||
+                song.originalLang === activeLanguage ||
+                song.translatedTo.includes(activeLanguage);
+            const matchesGenre = activeGenre === 'All' || song.genre === activeGenre;
+            const matchesOwner = activeOwner === 'All' || song.owner === activeOwner;
+            return matchesSearch && matchesLang && matchesGenre && matchesOwner;
+        });
+
+        return filtered.sort((leftSong, rightSong) => {
+            const leftTime = leftSong.createdAt ? new Date(leftSong.createdAt).getTime() : 0;
+            const rightTime = rightSong.createdAt ? new Date(rightSong.createdAt).getTime() : 0;
+            return sortOrder === 'oldest' ? leftTime - rightTime : rightTime - leftTime;
+        });
+    }, [activeGenre, activeLanguage, activeOwner, allSongs, searchQuery, sortOrder]);
 
     return (
         <div className="min-h-screen bg-[#fafafa] selection:bg-indigo-100 selection:text-indigo-900 font-sans pb-24 relative flex flex-col">
@@ -277,7 +366,7 @@ export default function Explore() {
                 </div>
 
                 {/* Results Header */}
-                <div className="flex justify-between items-end mb-8">
+                <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-end mb-8">
                     <div>
                         <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-2">
                             <TrendingUp className="text-indigo-600" size={24} />
@@ -289,6 +378,20 @@ export default function Explore() {
                         {fetchError ? (
                             <p className="text-sm text-red-500 mt-2">{fetchError}</p>
                         ) : null}
+                    </div>
+                    <div className="flex items-center gap-3">
+                        <label htmlFor="explore-sort" className="text-xs font-bold uppercase tracking-widest text-slate-400">
+                            Sort By
+                        </label>
+                        <select
+                            id="explore-sort"
+                            value={sortOrder}
+                            onChange={(event) => setSortOrder(event.target.value)}
+                            className="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-600/20"
+                        >
+                            <option value="newest">Newest first</option>
+                            <option value="oldest">Oldest first</option>
+                        </select>
                     </div>
                 </div>
 
@@ -325,6 +428,19 @@ export default function Explore() {
                                     <div className="absolute top-3 left-3 bg-slate-950/30 backdrop-blur-md border border-white/20 text-white text-[11px] font-bold px-3 py-1.5 rounded-full">
                                         {song.statusLabel}
                                     </div>
+                                    <button
+                                        type="button"
+                                        aria-label={song.isFavorite ? 'Remove from favorites' : 'Save to favorites'}
+                                        onClick={(event) => handleFavoriteToggle(event, song)}
+                                        disabled={favoriteLoadingId === song.id}
+                                        className={`absolute bottom-3 right-3 z-10 inline-flex h-10 w-10 items-center justify-center rounded-full border border-white/30 backdrop-blur-md transition-colors ${
+                                            song.isFavorite
+                                                ? 'bg-white text-pink-600'
+                                                : 'bg-slate-950/25 text-white hover:bg-white hover:text-pink-600'
+                                        } ${favoriteLoadingId === song.id ? 'opacity-60 cursor-wait' : ''}`}
+                                    >
+                                        <Heart size={18} className={song.isFavorite ? 'fill-current' : ''} />
+                                    </button>
                                 </div>
 
                                 {/* Song Info */}
@@ -346,14 +462,19 @@ export default function Explore() {
                                 {/* Card Footer (Stats) */}
                                 <div className="px-2 pt-4 border-t border-slate-100 flex items-center justify-between mt-auto">
                                     <div className="flex gap-4">
-                                        <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 group-hover:text-pink-600 transition-colors">
-                                            <Heart size={16} className="group-hover:fill-pink-600 transition-colors" />
+                                        <button
+                                            type="button"
+                                            onClick={(event) => handleLike(event, song)}
+                                            disabled={likeLoadingId === song.id}
+                                            className={`flex items-center gap-1.5 text-sm font-semibold text-slate-500 transition-colors hover:text-pink-600 ${likeLoadingId === song.id ? 'opacity-60 cursor-wait' : ''}`}
+                                        >
+                                            <ThumbsUp size={16} className="transition-colors hover:fill-pink-600" />
                                             {song.likes}
-                                        </div>
-                                        <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 group-hover:text-indigo-600 transition-colors">
+                                        </button>
+                                        {/* <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 group-hover:text-indigo-600 transition-colors">
                                             <BookOpen size={16} />
                                             {song.annotations}
-                                        </div>
+                                        </div> */}
                                     </div>
                                     <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors text-slate-400">
                                         <ChevronRight size={18} />

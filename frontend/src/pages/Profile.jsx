@@ -33,20 +33,20 @@ export default function Profile() {
     useEffect(() => {
         const fetchProfile = async () => {
             try {
-                const response = await axios.get(BASE_URL + API_ENDPOINTS.PROFILE, {
+                const profileResponse = await axios.get(BASE_URL + API_ENDPOINTS.PROFILE, {
                     withCredentials: true // Sends the secure cookies
                 });
                 // Populate the state with database values
                 setUser({
-                    id: response.data.id,
-                    username: response.data.username || '',
-                    first_name: response.data.first_name || '',
-                    last_name: response.data.last_name || '',
-                    email: response.data.email || '',
-                    bio: response.data.bio || '',
-                    rating: response.data.rating ?? null,
-                    preferred_language: response.data.preferred_language || 'en',
-                    role: response.data.role || ''
+                    id: profileResponse.data.id,
+                    username: profileResponse.data.username || '',
+                    first_name: profileResponse.data.first_name || '',
+                    last_name: profileResponse.data.last_name || '',
+                    email: profileResponse.data.email || '',
+                    bio: profileResponse.data.bio || '',
+                    rating: profileResponse.data.rating ?? null,
+                    preferred_language: profileResponse.data.preferred_language || 'en',
+                    role: profileResponse.data.role || ''
                 });
             } catch (error) {
                 console.error("Error fetching profile:", error);

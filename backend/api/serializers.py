@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import User, Song, Languages, Genre, LabelSong, Dictionary, AnnotationRequest 
+from .models import User, Song, Languages, Genre, LabelSong, Dictionary, AnnotationRequest, FavoriteSong
 
 class UserSerializer(serializers.ModelSerializer):
     class Meta:
@@ -35,12 +35,15 @@ class SongSerializer(serializers.ModelSerializer):
     can_annotate = serializers.SerializerMethodField()
     is_editable = serializers.SerializerMethodField()
     owner_type = serializers.SerializerMethodField()
+    is_favorite = serializers.SerializerMethodField()
 
     class Meta:
         model = Song
         fields = [
             'id',
             'title',
+            'likes',
+            'audio_file',
             'rating',
             'genre',
             'genre_display',
@@ -53,6 +56,7 @@ class SongSerializer(serializers.ModelSerializer):
             'can_annotate',
             'is_editable',
             'owner_type',
+            'is_favorite',
             'author',
             'author_username'
         ]
@@ -68,11 +72,20 @@ class SongSerializer(serializers.ModelSerializer):
     def get_owner_type(self, obj):
         return 'Independent Songwriters'
 
+    def get_is_favorite(self, obj):
+        user = self.context.get('request').user
+        if not user or not user.is_authenticated:
+            return False
+        if hasattr(obj, 'request_user_favorites'):
+            return bool(obj.request_user_favorites)
+        return obj.favorite_entries.filter(user=user).exists()
+
 
 class LabelSongSerializer(serializers.ModelSerializer):
     label_account_username = serializers.ReadOnlyField(source='label_account.username')
     genre_display = serializers.CharField(source='get_genre_display', read_only=True)
     original_language_display = serializers.CharField(source='get_original_language_display', read_only=True)
+    is_favorite = serializers.SerializerMethodField()
 
     class Meta:
         model = LabelSong
@@ -81,17 +94,28 @@ class LabelSongSerializer(serializers.ModelSerializer):
             'title',
             'artist',
             'movie',
+            'likes',
+            'audio_file',
             'rating',
             'genre',
             'genre_display',
             'original_language',
             'original_language_display',
+            'is_favorite',
             # 'official_lyrics',
             # 'created_at',
             'label_account',
             'label_account_username',
         ]
         read_only_fields = ['label_account', 'created_at']
+
+    def get_is_favorite(self, obj):
+        user = self.context.get('request').user
+        if not user or not user.is_authenticated:
+            return False
+        if hasattr(obj, 'request_user_favorites'):
+            return bool(obj.request_user_favorites)
+        return obj.favorite_entries.filter(user=user).exists()
 
 
 class LabelSongDetailSerializer(LabelSongSerializer):
@@ -127,3 +151,72 @@ class AnnotationRequestSerializer(serializers.ModelSerializer):
             'contributor', 'status', 'created_at', 'reviewed_at',
             'song_title', 'song_author',
         ]
+
+
+class FavoriteSongSerializer(serializers.ModelSerializer):
+    song_title = serializers.SerializerMethodField()
+    artist_name = serializers.SerializerMethodField()
+    genre = serializers.SerializerMethodField()
+    genre_display = serializers.SerializerMethodField()
+    original_language = serializers.SerializerMethodField()
+    original_language_display = serializers.SerializerMethodField()
+    owner_type = serializers.SerializerMethodField()
+    route = serializers.SerializerMethodField()
+    source_id = serializers.SerializerMethodField()
+    is_label_song = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FavoriteSong
+        fields = [
+            'id',
+            'created_at',
+            'song',
+            'label_song',
+            'song_title',
+            'artist_name',
+            'genre',
+            'genre_display',
+            'original_language',
+            'original_language_display',
+            'owner_type',
+            'route',
+            'source_id',
+            'is_label_song',
+        ]
+
+    def _target(self, obj):
+        return obj.label_song if obj.label_song_id else obj.song
+
+    def get_song_title(self, obj):
+        return self._target(obj).title
+
+    def get_artist_name(self, obj):
+        target = self._target(obj)
+        if obj.label_song_id:
+            return target.artist
+        return target.author.username
+
+    def get_genre(self, obj):
+        return self._target(obj).genre
+
+    def get_genre_display(self, obj):
+        return self._target(obj).get_genre_display()
+
+    def get_original_language(self, obj):
+        return self._target(obj).original_language
+
+    def get_original_language_display(self, obj):
+        return self._target(obj).get_original_language_display()
+
+    def get_owner_type(self, obj):
+        return 'Label Verified' if obj.label_song_id else 'Independent Songwriters'
+
+    def get_route(self, obj):
+        target = self._target(obj)
+        return f"/label-song/{target.id}" if obj.label_song_id else f"/song/{target.id}"
+
+    def get_source_id(self, obj):
+        return self._target(obj).id
+
+    def get_is_label_song(self, obj):
+        return bool(obj.label_song_id)

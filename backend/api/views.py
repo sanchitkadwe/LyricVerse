@@ -5,10 +5,11 @@ from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.exceptions import ValidationError
 from rest_framework_simplejwt.tokens import RefreshToken
 from django.contrib.auth.hashers import check_password, make_password
-from django.db.models import Q
+from django.db.models import Prefetch, Q
+from django.db.models import F
 from django.utils import timezone
-from .models import User, Song, Genre, Languages, LabelSong, Dictionary, AnnotationRequest
-from .serializers import UserSerializer, SongSerializer, GenreSerializer, LanguagesSerializer, LabelSongSerializer, LabelSongDetailSerializer, DictionarySerializer, AnnotationRequestSerializer
+from .models import User, Song, Genre, Languages, LabelSong, Dictionary, AnnotationRequest, FavoriteSong
+from .serializers import UserSerializer, SongSerializer, GenreSerializer, LanguagesSerializer, LabelSongSerializer, LabelSongDetailSerializer, DictionarySerializer, AnnotationRequestSerializer, FavoriteSongSerializer
 from django.utils import timezone
 from django.utils import timezone
 
@@ -33,6 +34,15 @@ class UserViewSet(viewsets.ModelViewSet):
                 serializer.save()
                 return Response(serializer.data, status=status.HTTP_200_OK)
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    @action(detail=False, methods=['get'], permission_classes=[IsAuthenticated])
+    def favorites(self, request):
+        favorites = FavoriteSong.objects.filter(user=request.user).select_related(
+            'song__author',
+            'label_song',
+        )
+        serializer = FavoriteSongSerializer(favorites, many=True)
+        return Response(serializer.data, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['post'], permission_classes=[AllowAny])
     def signup(self, request):
@@ -135,6 +145,14 @@ class SongViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         user = self.request.user
         base_queryset = Song.objects.select_related('author').order_by('-created_at')
+        if user.is_authenticated:
+            base_queryset = base_queryset.prefetch_related(
+                Prefetch(
+                    'favorite_entries',
+                    queryset=FavoriteSong.objects.filter(user=user),
+                    to_attr='request_user_favorites',
+                )
+            )
 
         if self.action in ['create', 'update', 'partial_update', 'destroy', 'submit', 'final_publish']:
             if not user.is_authenticated:
@@ -229,6 +247,24 @@ class SongViewSet(viewsets.ModelViewSet):
         song.status = 'PUBLISHED'
         song.save()
         return Response({"message": f"'{song.title}' has been published!"})
+
+    @action(detail=True, methods=['post', 'delete'], permission_classes=[IsAuthenticated])
+    def favorite(self, request, pk=None):
+        song = self.get_object()
+
+        if request.method == 'POST':
+            FavoriteSong.objects.get_or_create(user=request.user, song=song)
+            return Response({'is_favorite': True}, status=status.HTTP_200_OK)
+
+        FavoriteSong.objects.filter(user=request.user, song=song).delete()
+        return Response({'is_favorite': False}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], permission_classes=[AllowAny])
+    def like(self, request, pk=None):
+        song = self.get_object()
+        Song.objects.filter(pk=song.pk).update(likes=F('likes') + 1)
+        song.refresh_from_db(fields=['likes'])
+        return Response({'likes': song.likes}, status=status.HTTP_200_OK)
     
 
 
@@ -252,13 +288,44 @@ class DictionaryViewSet(viewsets.ReadOnlyModelViewSet):
 class LabelSongViewSet(viewsets.ReadOnlyModelViewSet):
     serializer_class = LabelSongSerializer
     # permission_classes = [IsAuthenticated]
-    http_method_names = ['get']
+    http_method_names = ['get', 'post', 'delete', 'head', 'options']
     queryset = LabelSong.objects.select_related('label_account').all().order_by('-created_at')
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        user = self.request.user
+        if not user.is_authenticated:
+            return queryset
+        return queryset.prefetch_related(
+            Prefetch(
+                'favorite_entries',
+                queryset=FavoriteSong.objects.filter(user=user),
+                to_attr='request_user_favorites',
+            )
+        )
 
     def get_serializer_class(self):
         if self.action == 'retrieve':
             return LabelSongDetailSerializer
         return LabelSongSerializer
+
+    @action(detail=True, methods=['post', 'delete'], permission_classes=[IsAuthenticated])
+    def favorite(self, request, pk=None):
+        label_song = self.get_object()
+
+        if request.method == 'POST':
+            FavoriteSong.objects.get_or_create(user=request.user, label_song=label_song)
+            return Response({'is_favorite': True}, status=status.HTTP_200_OK)
+
+        FavoriteSong.objects.filter(user=request.user, label_song=label_song).delete()
+        return Response({'is_favorite': False}, status=status.HTTP_200_OK)
+
+    @action(detail=True, methods=['post'], permission_classes=[AllowAny])
+    def like(self, request, pk=None):
+        label_song = self.get_object()
+        LabelSong.objects.filter(pk=label_song.pk).update(likes=F('likes') + 1)
+        label_song.refresh_from_db(fields=['likes'])
+        return Response({'likes': label_song.likes}, status=status.HTTP_200_OK)
 
 
 class AnnotationRequestViewSet(viewsets.ModelViewSet):

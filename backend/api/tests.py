@@ -3,7 +3,7 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from .models import Song
+from .models import LabelSong, Song
 
 
 User = get_user_model()
@@ -80,3 +80,75 @@ class SongWorkflowTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         song.refresh_from_db()
         self.assertEqual(song.title, "Midnight Rain")
+
+
+class FavoriteSongTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            username="listener_one",
+            password="testpass123",
+            role="user",
+        )
+        self.author = User.objects.create_user(
+            username="writer_two",
+            password="testpass123",
+            role="user",
+        )
+        self.label_user = User.objects.create_user(
+            username="label_house",
+            password="testpass123",
+            role="Music Label",
+        )
+        self.song = Song.objects.create(
+            author=self.author,
+            title="City Lights",
+            genre="indie",
+            original_language="en",
+            original_lyrics="Streetlights shimmer in the rain",
+            status="PUBLISHED",
+        )
+        self.label_song = LabelSong.objects.create(
+            label_account=self.label_user,
+            title="Official Anthem",
+            artist="Studio Voice",
+            genre="dance",
+            original_language="hi",
+            official_lyrics="Official hook line",
+        )
+        self.client.force_authenticate(user=self.user)
+
+    def test_song_favorite_can_be_added_and_removed(self):
+        add_response = self.client.post(reverse("song-favorite", args=[self.song.id]))
+        self.assertEqual(add_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(add_response.data["is_favorite"])
+
+        list_response = self.client.get(reverse("song-list"))
+        favorite_state = next(item for item in list_response.data if item["id"] == self.song.id)
+        self.assertTrue(favorite_state["is_favorite"])
+
+        remove_response = self.client.delete(reverse("song-favorite", args=[self.song.id]))
+        self.assertEqual(remove_response.status_code, status.HTTP_200_OK)
+        self.assertFalse(remove_response.data["is_favorite"])
+
+    def test_label_song_favorite_is_returned_in_profile_favorites(self):
+        add_response = self.client.post(reverse("label-songs-favorite", args=[self.label_song.id]))
+        self.assertEqual(add_response.status_code, status.HTTP_200_OK)
+        self.assertTrue(add_response.data["is_favorite"])
+
+        favorites_response = self.client.get(reverse("user-favorites"))
+        self.assertEqual(favorites_response.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(favorites_response.data), 1)
+        favorite = favorites_response.data[0]
+        self.assertEqual(favorite["song_title"], "Official Anthem")
+        self.assertTrue(favorite["is_label_song"])
+        self.assertEqual(favorite["route"], f"/label-song/{self.label_song.id}")
+
+    def test_song_like_endpoint_increments_likes(self):
+        self.assertEqual(self.song.likes, 0)
+
+        response = self.client.post(reverse("song-like", args=[self.song.id]))
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.song.refresh_from_db()
+        self.assertEqual(self.song.likes, 1)
+        self.assertEqual(response.data["likes"], 1)
