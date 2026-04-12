@@ -78,7 +78,6 @@ class SongSerializer(serializers.ModelSerializer):
             'author',
             'author_username'
         ]
-        # These fields cannot be modified directly via standard POST/PUT requests
         read_only_fields = ['author', 'created_at', 'status']
 
     def get_can_annotate(self, obj):
@@ -121,8 +120,6 @@ class LabelSongSerializer(serializers.ModelSerializer):
             'original_language',
             'original_language_display',
             'is_favorite',
-            # 'official_lyrics',
-            # 'created_at',
             'label_account',
             'label_account_username',
         ]

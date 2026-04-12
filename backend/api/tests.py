@@ -3,13 +3,8 @@ from django.urls import reverse
 from rest_framework import status
 from rest_framework.test import APITestCase
 from unittest.mock import patch
-
 from .models import LabelSong, Song, TranslatedLyrics
-
-
 User = get_user_model()
-
-
 class SongWorkflowTests(APITestCase):
     def setUp(self):
         self.author = User.objects.create_user(
@@ -32,7 +27,6 @@ class SongWorkflowTests(APITestCase):
             original_lyrics="Walking through the midnight rain",
             status=status_value,
         )
-
     def test_submit_then_final_publish_transitions_song(self):
         song = self.create_song()
         self.client.force_authenticate(user=self.author)

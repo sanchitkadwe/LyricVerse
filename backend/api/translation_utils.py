@@ -1,9 +1,6 @@
 import json
 from urllib import error, request
-
 from django.conf import settings
-
-
 LANGUAGE_NAME_MAP = {
     "en": "English",
     "english": "English",
@@ -16,7 +13,6 @@ LANGUAGE_NAME_MAP = {
     "bn": "Bengali",
     "bengali": "Bengali",
 }
-
 LANGUAGE_FIELD_MAP = {
     "en": "english_lyrics",
     "hi": "hindi_lyrics",

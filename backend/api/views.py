@@ -17,8 +17,6 @@ from .translation_utils import get_translation_field_name, normalize_language_co
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()
     serializer_class = UserSerializer
-    
-    # By default, endpoints require the user to be logged in
     permission_classes = [IsAuthenticated]
 
     @action(detail=False, methods=['get', 'put', 'patch'], permission_classes=[IsAuthenticated])
@@ -105,7 +103,7 @@ class UserViewSet(viewsets.ModelViewSet):
                     key='access_token',
                     value=access_token,
                     httponly=True,
-                    secure=False,  # Set to True in Production (HTTPS)
+                    secure=False,
                     samesite='Lax',
                     path='/'
                 )
@@ -114,7 +112,7 @@ class UserViewSet(viewsets.ModelViewSet):
                     key='refresh_token',
                     value=str(refresh),
                     httponly=True,
-                    secure=False,  # Set to True in Production (HTTPS)
+                    secure=False,
                     samesite='Lax',
                     path='/',
                 )
@@ -621,14 +619,11 @@ class AnnotationRequestViewSet(viewsets.ModelViewSet):
         song_id = self.request.query_params.get('song')
 
         if song_id:
-            # Only the song's author can list requests for a specific song
             return AnnotationRequest.objects.filter(
                 song__id=song_id,
                 song__author=user,
             ).select_related('contributor', 'song')
 
-        # Fallback: visible to both the contributor and the song's author
-        # This allows get_object() to resolve in the `review` action
         return AnnotationRequest.objects.filter(
             Q(contributor=user) | Q(song__author=user)
         ).select_related('contributor', 'song')
@@ -656,7 +651,6 @@ class AnnotationRequestViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
-        # Prevent duplicate pending submissions by the same user
         existing = AnnotationRequest.objects.filter(
             song=song, contributor=request.user, status='pending'
         ).exists()
@@ -692,7 +686,6 @@ class AnnotationRequestViewSet(viewsets.ModelViewSet):
         annotation_request.reviewed_at = timezone.now()
         annotation_request.save()
 
-        # If accepted, apply the proposed lyrics to the song immediately
         if new_status == 'accepted':
             song = annotation_request.song
             song.original_lyrics = annotation_request.proposed_lyrics
@@ -740,8 +733,6 @@ class AnnotationRequestViewSet(viewsets.ModelViewSet):
         annotation_request.status = new_status
         annotation_request.reviewed_at = timezone.now()
         annotation_request.save()
-
-        # Apply the author-curated merged lyrics to the song
         song = annotation_request.song
         song.original_lyrics = applied_lyrics
         song.save(update_fields=['original_lyrics'])

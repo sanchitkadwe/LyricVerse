@@ -2,8 +2,6 @@ from django.db import models
 from django.contrib.auth.models import AbstractUser
 from django.conf import settings
 from django.db.models import Q
-
-# Custom User model to extend Django's built-in user with additional fields
 class User(AbstractUser):
 
     LANGUAGE_CHOICES = [
@@ -105,25 +103,16 @@ class Song(models.Model):
 
     def __str__(self):
         return self.title
-    
 
-    
-
-    
-    
 class LabelSong(models.Model):
-    # Links to the label who uploaded it
     Rating =[1,2,3,4,5]
-    label_account = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='label_songs',blank=False,null=False)
-    
+    label_account = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='label_songs',blank=False,null=False)    
     title = models.CharField(max_length=200,blank=False)
     artist = models.CharField(max_length=200)
     movie = models.CharField(max_length=200, blank=True)
     rating = models.FloatField(choices=[(i, i) for i in Rating], blank=True, null=True)
     genre = models.CharField(max_length=50, blank=True, choices=Genre.GENRE_CHOICES)
     original_language = models.CharField(max_length=50, default='English', choices=User.LANGUAGE_CHOICES)
-    
-    # One simple text field for the official lyrics. No line-by-line database rows needed!
     likes =  models.IntegerField(default=0)
     audio_file = models.FileField(upload_to='audio/', blank=True, null=True)
     tts_audio_file = models.FileField(upload_to='tts/', blank=True, null=True)
@@ -183,7 +172,6 @@ class FavoriteSong(models.Model):
 
 
 class Dictionary(models.Model):
-
     word = models.CharField(max_length=25, unique=True)
     language = models.CharField(
         choices=Languages.LANGUAGE_CHOICES
@@ -201,13 +189,11 @@ class WordContribution(models.Model):
     cultural_context = models.TextField(blank=True, default='')
     upvotes = models.IntegerField(default=0)
     created_at = models.DateTimeField(auto_now_add=True)
-
     class Meta:
         ordering = ['-upvotes', '-created_at']
 
     def __str__(self):
         return f"{self.contributor.username} on '{self.dictionary.word}'"
-
 
 class SavedWord(models.Model):
     user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name='saved_words')
@@ -221,7 +207,6 @@ class SavedWord(models.Model):
     def __str__(self):
         return f"{self.user.username} saved '{self.dictionary.word}'"
     
-
 class TranslatedLyrics(models.Model):
     song = models.ForeignKey(Song, on_delete=models.CASCADE, related_name='lyrics')
     english_lyrics= models.TextField()
@@ -232,9 +217,6 @@ class TranslatedLyrics(models.Model):
     def __str__(self):
         return f"{self.song.title} - Translated Lyrics"
     
-
-
-
 class AnnotationRequest(models.Model):
     STATUS_CHOICES = [
         ('pending', 'Pending'),
