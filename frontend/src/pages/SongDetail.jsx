@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -6,6 +6,7 @@ import {
   Share2,
   Star,
   PlayCircle,
+  PauseCircle,
   Volume2,
   Square,
   Globe2,
@@ -52,6 +53,10 @@ export default function SongDetail() {
   const [likeLoading, setLikeLoading] = useState(false);
   const [translationsByLanguage, setTranslationsByLanguage] = useState({});
   const [translationLoadingLang, setTranslationLoadingLang] = useState('');
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const audioRef = useRef(null);
 
   useEffect(() => {
     const fetchSong = async () => {
@@ -313,6 +318,37 @@ export default function SongDetail() {
     } finally {
       setTranslationLoadingLang('');
     }
+  };
+
+  const audioUrl = useMemo(() => {
+    const file = normalizedSong?.audio_file;
+    if (!file) return null;
+    if (file.startsWith('http')) return file;
+    return `${BASE_URL}${file}`;
+  }, [normalizedSong]);
+
+  const handleAudioToggle = () => {
+    const audio = audioRef.current;
+    if (!audio) return;
+    if (isPlaying) {
+      audio.pause();
+    } else {
+      audio.play();
+    }
+  };
+
+  const handleAudioSeek = (e) => {
+    const audio = audioRef.current;
+    if (!audio || !duration) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    const ratio = (e.clientX - rect.left) / rect.width;
+    audio.currentTime = ratio * duration;
+  };
+
+  const formatTime = (seconds) => {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
   useEffect(() => {
@@ -634,6 +670,45 @@ export default function SongDetail() {
                 ))}
               </div>
             </div>
+
+            {audioUrl && (
+              <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-3xl p-6 shadow-sm">
+                <h3 className="text-sm font-extrabold text-slate-900 uppercase tracking-wider mb-4 flex items-center gap-2">
+                  <Music size={16} className="text-slate-400" /> Play Audio
+                </h3>
+                <audio
+                  ref={audioRef}
+                  src={audioUrl}
+                  onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime || 0)}
+                  onLoadedMetadata={() => setDuration(audioRef.current?.duration || 0)}
+                  onPlay={() => setIsPlaying(true)}
+                  onPause={() => setIsPlaying(false)}
+                  onEnded={() => setIsPlaying(false)}
+                />
+                <div className="flex flex-col gap-3">
+                  <div
+                    className="w-full h-2 bg-slate-100 rounded-full cursor-pointer overflow-hidden"
+                    onClick={handleAudioSeek}
+                  >
+                    <div
+                      className="h-full bg-indigo-500 rounded-full transition-all"
+                      style={{ width: duration ? `${(currentTime / duration) * 100}%` : '0%' }}
+                    />
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-medium text-slate-400">{formatTime(currentTime)}</span>
+                    <button
+                      onClick={handleAudioToggle}
+                      className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-xl text-sm font-bold transition-colors"
+                    >
+                      {isPlaying ? <PauseCircle size={18} /> : <PlayCircle size={18} />}
+                      {isPlaying ? 'Pause' : 'Play'}
+                    </button>
+                    <span className="text-xs font-medium text-slate-400">{formatTime(duration)}</span>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div className="bg-gradient-to-br from-indigo-600 to-violet-700 rounded-3xl p-6 shadow-lg text-white relative overflow-hidden">
               <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full blur-2xl -mr-10 -mt-10" />
