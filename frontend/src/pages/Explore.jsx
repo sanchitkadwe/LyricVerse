@@ -19,8 +19,6 @@ import { API_ENDPOINTS, BASE_URL } from '../utils/constants';
 export default function Explore() {
     const navigate = useNavigate();
     const { addToast } = useToast();
-
-    // State for search and filters
     const [searchQuery, setSearchQuery] = useState('');
     const [activeLanguage, setActiveLanguage] = useState('All');
     const [activeGenre, setActiveGenre] = useState('All');
@@ -253,7 +251,6 @@ export default function Explore() {
     return (
         <div className="min-h-screen bg-[#fafafa] selection:bg-indigo-100 selection:text-indigo-900 font-sans pb-24 relative flex flex-col">
             <Navbar />
-            {/* Ambient Background Glow */}
             <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
                 <div className="absolute top-0 right-0 w-[50%] h-[40%] bg-indigo-200/40 rounded-full mix-blend-multiply filter blur-[120px]"></div>
                 <div className="absolute top-40 left-[-10%] w-[40%] h-[40%] bg-purple-200/40 rounded-full mix-blend-multiply filter blur-[120px]"></div>
@@ -365,7 +362,7 @@ export default function Explore() {
 
                 </div>
 
-                {/* Results Header */}
+                {/* Results */}
                 <div className="flex flex-col gap-4 sm:flex-row sm:justify-between sm:items-end mb-8">
                     <div>
                         <h2 className="text-2xl font-extrabold text-slate-900 flex items-center gap-2">
@@ -471,10 +468,6 @@ export default function Explore() {
                                             <ThumbsUp size={16} className="transition-colors hover:fill-pink-600" />
                                             {song.likes}
                                         </button>
-                                        {/* <div className="flex items-center gap-1.5 text-sm font-semibold text-slate-500 group-hover:text-indigo-600 transition-colors">
-                                            <BookOpen size={16} />
-                                            {song.annotations}
-                                        </div> */}
                                     </div>
                                     <div className="w-8 h-8 rounded-full bg-slate-50 flex items-center justify-center group-hover:bg-indigo-50 group-hover:text-indigo-600 transition-colors text-slate-400">
                                         <ChevronRight size={18} />

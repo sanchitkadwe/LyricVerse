@@ -13,7 +13,6 @@ import {
 export default function AdminNavbar() {
   const location = useLocation();
 
-  // Define admin-specific navigation links
   const navLinks = [
     { name: 'Overview', path: '/admin/dashboard', icon: LayoutDashboard },
     { name: 'Lyrics Verification', path: '/admin/lyrics', icon: FileCheck },
@@ -26,10 +25,8 @@ export default function AdminNavbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-20">
           
-          {/* Left Side: Logo & Main Links */}
           <div className="flex items-center gap-10">
-            
-            {/* Logo with Admin Badge */}
+
             <Link to="/admin/dashboard" className="flex-shrink-0 flex items-center gap-2 group cursor-pointer">
               <div className="bg-gradient-to-br from-indigo-600 to-violet-600 text-white p-2 rounded-xl group-hover:shadow-lg group-hover:shadow-indigo-200 transition-all">
                 <Music size={24} strokeWidth={2.5} />
@@ -44,7 +41,6 @@ export default function AdminNavbar() {
               </div>
             </Link>
 
-            {/* Desktop Navigation Links */}
             <div className="hidden md:flex space-x-8 h-20">
               {navLinks.map((item) => {
                 const isActive = location.pathname.includes(item.path);
@@ -67,10 +63,8 @@ export default function AdminNavbar() {
             </div>
           </div>
 
-          {/* Right Side: Profile Actions */}
           <div className="flex items-center gap-4 sm:gap-6">
 
-            {/* Admin Profile Dropdown Trigger */}
             <Link to="/profile" className="flex items-center gap-3 p-1 pr-3 rounded-full border border-slate-200 hover:border-indigo-200 hover:bg-indigo-50/50 transition-all cursor-pointer">
               <div className="w-8 h-8 rounded-full bg-gradient-to-br from-slate-800 to-slate-900 border border-slate-700 flex items-center justify-center text-white shadow-sm">
                 <Shield size={14} strokeWidth={2.5} />

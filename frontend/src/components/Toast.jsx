@@ -1,13 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import { CheckCircle2, AlertCircle, Info, X } from 'lucide-react';
-
-// 1. Create the Context
 const ToastContext = createContext();
-
-// 2. Custom Hook to use the Toast
 export const useToast = () => useContext(ToastContext);
-
-// 3. The Provider Component
 export const ToastProvider = ({ children }) => {
     const [toasts, setToasts] = useState([]);
 
@@ -23,8 +17,6 @@ export const ToastProvider = ({ children }) => {
     return (
         <ToastContext.Provider value={{ addToast }}>
             {children}
-
-            {/* Toast Container (Responsive Positioning) */}
             <div className="fixed z-[100] flex flex-col items-center gap-3 pointer-events-none top-4 sm:top-6 left-1/2 -translate-x-1/2 w-full px-4 max-w-sm sm:w-96">        {toasts.map((toast) => (
                 <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />
             ))}
@@ -32,12 +24,8 @@ export const ToastProvider = ({ children }) => {
         </ToastContext.Provider>
     );
 };
-
-// 4. The Individual Toast UI Component
 const ToastItem = ({ toast, onRemove }) => {
     const [isClosing, setIsClosing] = useState(false);
-
-    // Auto-dismiss logic
     useEffect(() => {
         const timer = setTimeout(() => handleClose(), toast.duration);
         return () => clearTimeout(timer);
@@ -45,11 +33,9 @@ const ToastItem = ({ toast, onRemove }) => {
 
     const handleClose = () => {
         setIsClosing(true);
-        // Wait for the slide-out animation to finish before actually removing from DOM
+
         setTimeout(() => onRemove(toast.id), 300);
     };
-
-    // Theme mapping based on success vs error
     const theme = {
         success: {
             icon: <CheckCircle2 className="text-emerald-500" size={24} />,
@@ -73,7 +59,6 @@ const ToastItem = ({ toast, onRemove }) => {
 
     return (
         <>
-            {/* Inline animations for easy copy-pasting */}
             <style>{`
        @keyframes toastEnter {
           from { opacity: 0; transform: translateY(-20px) scale(0.95); }
@@ -118,7 +103,7 @@ const ToastItem = ({ toast, onRemove }) => {
                     <X size={16} />
                 </button>
 
-                {/* Animated Progress Bar at the bottom */}
+                {/* Progress Bar */}
                 <div className="absolute bottom-0 left-0 h-1 w-full bg-slate-100">
                     <div
                         className={`h-full ${theme.bg} animate-progress`}

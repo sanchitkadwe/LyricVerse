@@ -18,8 +18,6 @@ import {
 export default function Navbar() {
     const location = useLocation();
     const [menuOpen, setMenuOpen] = useState(false);
-
-    // Define our navigation links in an array to easily map through them
     const navLinks = [
         { name: 'Dashboard', path: '/dashboard', icon: LayoutDashboard },
         { name: 'Explore', path: '/explore', icon: SearchIcon },
@@ -75,8 +73,6 @@ export default function Navbar() {
 
                     {/* Right Side */}
                     <div className="flex items-center gap-3">
-
-                        {/* Hamburger Button (Mobile Only) */}
                         <button
                             onClick={() => setMenuOpen(!menuOpen)}
                             className="md:hidden p-2 rounded-lg hover:bg-slate-100 transition"

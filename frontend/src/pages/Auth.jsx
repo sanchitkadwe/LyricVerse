@@ -28,10 +28,8 @@ export default function AuthPage() {
     const [errors, setErrors] = useState({});
     const [serverError, setServerError] = useState('');
 
-    // Handle Input Changes
     const handleChange = (e) => {
         setFormData({ ...formData, [e.target.name]: e.target.value });
-        // Clear errors when user starts typing
         if (errors[e.target.name]) {
             setErrors({ ...errors, [e.target.name]: null });
         }
@@ -45,17 +43,12 @@ export default function AuthPage() {
         setErrors({});
         setServerError('');
     };
-
-    // 3. Form Validation Logic
     const validateForm = () => {
         let newErrors = {};
-
-        // Login Validation
         if (isLogin) {
             if (!formData.username) newErrors.username = "Username is required";
             if (!formData.password) newErrors.password = "Password is required";
         }
-        // Signup Validation
         else {
             if (!formData.firstName) newErrors.firstName = "First name required";
             if (!formData.lastName) newErrors.lastName = "Last name required";
@@ -76,7 +69,6 @@ export default function AuthPage() {
         return Object.keys(newErrors).length === 0; // Returns true if no errors
     };
 
-    // 4. API Submission
     const handleSubmit = async (e) => {
         e.preventDefault();
 
@@ -87,12 +79,11 @@ export default function AuthPage() {
 
         try {
             if (isLogin) {
-                // --- LOGIN API CALL ---
                 const response = await axios.post(BASE_URL + API_ENDPOINTS.LOGIN, {
                     username: formData.username,
                     password: formData.password
                 }, {
-                    withCredentials: true // CRITICAL: Allows Django to set the HTTP-only cookies
+                    withCredentials: true
                 });
 
                 addToast({
@@ -109,19 +100,15 @@ export default function AuthPage() {
                 else navigate('/dashboard');
 
             } else {
-                // --- SIGNUP API CALL ---
                 const response = await axios.post(BASE_URL + API_ENDPOINTS.SIGNUP, {
                     username: formData.username,
                     password: formData.password,
                     email: formData.email,
                     preferred_language: formData.preferredLanguage,
                     bio: formData.bio
-                    // Note: Django's AbstractUser has first_name and last_name, 
-                    // ensure your backend handles these if you want to save them!
                 });
 
                 console.log("Signed up successfully!", response.data);
-                // Automatically switch to login screen after successful signup
                 setIsLogin(true);
                 setServerError('Account created successfully! Please log in.');
             }
@@ -157,7 +144,6 @@ export default function AuthPage() {
 
             <div className="w-full max-w-5xl bg-white/80 backdrop-blur-2xl rounded-[2.5rem] shadow-2xl shadow-indigo-100/50 border border-slate-100 overflow-hidden flex flex-col lg:flex-row relative z-10 animate-fade-up min-h-[650px]">
 
-                {/* Left Side: Form Section */}
                 <div className="w-full lg:w-1/2 p-8 sm:p-12 lg:p-16 flex flex-col justify-center relative transition-all duration-500">
 
                     <div className="flex items-center gap-2 mb-8 cursor-pointer w-fit">
@@ -180,7 +166,6 @@ export default function AuthPage() {
                         </p>
                     </div>
 
-                    {/* Server Error/Success Message */}
                     {serverError && (
                         <div className={`mb-4 p-3 rounded-lg flex items-center gap-2 text-sm font-medium ${serverError.includes('success') ? 'bg-green-50 text-green-700 border border-green-200' : 'bg-red-50 text-red-700 border border-red-200'}`}>
                             <AlertCircle size={16} />
@@ -188,14 +173,13 @@ export default function AuthPage() {
                         </div>
                     )}
 
-                    {/* Form */}
                     <form className="space-y-4" onSubmit={handleSubmit}>
 
-                        {/* SIGNUP ONLY FIELDS */}
+
                         {!isLogin && (
                             <div className="space-y-4 animate-fade-up" style={{ animationDuration: '0.4s' }}>
 
-                                {/* First & Last Name Row */}
+
                                 <div className="flex gap-4">
                                     <div className="w-1/2 relative">
                                         <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
@@ -212,7 +196,6 @@ export default function AuthPage() {
                                     </div>
                                 </div>
 
-                                {/* Email Field */}
                                 <div className="relative">
                                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                         <Mail className="h-5 w-5 text-slate-400" />
@@ -225,9 +208,7 @@ export default function AuthPage() {
                             </div>
                         )}
 
-                        {/* SHARED FIELDS (Username & Password) */}
 
-                        {/* Username Field (Used for both Login and Signup based on our Django backend) */}
                         <div className="relative">
                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                 <AtSign className="h-5 w-5 text-slate-400" />
@@ -238,7 +219,7 @@ export default function AuthPage() {
                             {errors.username && <p className="text-red-500 text-xs mt-1 ml-1">{errors.username}</p>}
                         </div>
 
-                        {/* Password Field */}
+
                         <div className="relative">
                             <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                 <Lock className="h-5 w-5 text-slate-400" />
@@ -250,11 +231,9 @@ export default function AuthPage() {
                                 placeholder="Password"
                                 value={formData.password}
                                 onChange={handleChange}
-                                // Note the 'pr-12' here to make room for the eye icon!
+
                                 className={`w-full pl-11 pr-12 py-3 bg-slate-50 border ${errors.password ? 'border-red-400' : 'border-slate-200'} rounded-xl text-slate-900 font-medium placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600/20 focus:border-indigo-600 focus:bg-white transition-all duration-300`}
                             />
-
-                            {/* Toggle Visibility Button */}
                             <button
                                 type="button"
                                 onClick={() => setShowPassword(!showPassword)}
@@ -269,12 +248,8 @@ export default function AuthPage() {
 
                         </div>
                         {errors.password && <p className="text-red-500 text-xs mt-1 ml-1">{errors.password}</p>}
-
-                        {/* MORE SIGNUP ONLY FIELDS */}
                         {!isLogin && (
                             <div className="space-y-4 animate-fade-up" style={{ animationDuration: '0.6s' }}>
-
-                                {/* Language Dropdown */}
                                 <div className="relative">
                                     <div className="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
                                         <Globe className="h-5 w-5 text-slate-400" />
@@ -289,8 +264,6 @@ export default function AuthPage() {
                                         <option value="bn">Bengali (বাংলা)</option>
                                     </select>
                                 </div>
-
-                                {/* Bio Field (Optional) */}
                                 <div className="relative">
                                     <div className="absolute top-3 left-0 pl-4 pointer-events-none">
                                         <FileText className="h-5 w-5 text-slate-400" />
@@ -310,7 +283,6 @@ export default function AuthPage() {
                             </div>
                         )}
 
-                        {/* Submit Button */}
                         <button
                             type="submit"
                             disabled={isLoading}
@@ -321,7 +293,7 @@ export default function AuthPage() {
                         </button>
                     </form>
 
-                    {/* Toggle Link */}
+    
                     <p className="text-center mt-6 text-slate-500 font-medium">
                         {isLogin ? "Don't have an account? " : "Already have an account? "}
                         <button onClick={toggleAuthMode}
@@ -332,7 +304,6 @@ export default function AuthPage() {
                     </p>
                 </div>
 
-                {/* Right Side: Visual Section (Unchanged) */}
                 <div className="hidden lg:flex w-1/2 bg-gradient-to-br from-indigo-600 to-violet-700 p-12 relative overflow-hidden flex-col justify-between">
                     <div className="absolute top-0 right-0 -mt-20 -mr-20 w-80 h-80 bg-white/10 rounded-full blur-3xl"></div>
                     <div className="absolute bottom-0 left-0 -mb-20 -ml-20 w-80 h-80 bg-indigo-900/30 rounded-full blur-3xl"></div>

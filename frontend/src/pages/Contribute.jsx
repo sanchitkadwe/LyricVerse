@@ -213,9 +213,7 @@ export default function Contribute() {
 
       try {
         localStorage.setItem(getVersionStorageKey(song.id), JSON.stringify(nextVersions));
-      } catch {
-        // Ignore storage failures and keep the save flow moving.
-      }
+      } catch {}
 
       return nextVersions;
     });

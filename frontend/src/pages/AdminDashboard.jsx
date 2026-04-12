@@ -16,20 +16,15 @@ import {
 } from 'lucide-react';
 
 export default function AdminDashboard() {
-  // Mock Data for Pending Approvals
   const [pendingLyrics, setPendingLyrics] = useState([
     { id: 101, title: 'Echoes of Mumbai', artist: 'Jane Doe', language: 'Marathi', submittedBy: 'user_421', date: '2 hours ago', status: 'Pending' },
     { id: 102, title: 'Neon Lights', artist: 'The Wanderers', language: 'Hindi', submittedBy: 'user_89', date: '5 hours ago', status: 'Pending' },
     { id: 103, title: 'Desert Rose', artist: 'Priya Sharma', language: 'Punjabi', submittedBy: 'user_773', date: '1 day ago', status: 'Pending' },
   ]);
-
-  // Mock Data for Pending Annotations (Wiki)
   const [pendingAnnotations, setPendingAnnotations] = useState([
     { id: 1, term: 'Nakhra', song: 'Neon Lights', user: 'music_lover99', meaning: 'Swagger or attitude, often playful.' },
     { id: 2, term: 'Jugaad', song: 'Echoes of Mumbai', user: 'mumbai_indie', meaning: 'A flexible approach to problem-solving.' },
   ]);
-
-  // Action Handlers (Mock)
   const handleApproveLyric = (id) => {
     setPendingLyrics(pendingLyrics.filter(item => item.id !== id));
   };
@@ -42,16 +37,13 @@ export default function AdminDashboard() {
 
       <div className="min-h-screen bg-[#fafafa] selection:bg-indigo-100 selection:text-indigo-900 font-sans pb-20 relative">
         <AdminNavbar />
-      
-      {/* Ambient Background Glow */}
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-200/40 rounded-full mix-blend-multiply filter blur-[120px]"></div>
         <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-violet-200/40 rounded-full mix-blend-multiply filter blur-[120px]"></div>
       </div>
 
       <div className="relative z-10 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-12">
-        
-        {/* Page Header */}
+
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-10">
           <div>
             <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Platform Overview</h1>
@@ -63,7 +55,6 @@ export default function AdminDashboard() {
           </button>
         </div>
 
-        {/* High-Level Stats Grid */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
           {[
             { label: 'Total Users', value: '12,450', trend: '+12% this week', icon: Users, color: 'text-blue-600', bg: 'bg-blue-50' },
@@ -93,10 +84,8 @@ export default function AdminDashboard() {
           ))}
         </div>
 
-        {/* Main Dashboard Content */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          
-          {/* Left/Main Column: Lyric Verifications (Spans 2 columns) */}
+
           <div className="lg:col-span-2 flex flex-col gap-6">
             <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-[2rem] p-6 sm:p-8 shadow-sm">
               
@@ -178,7 +167,6 @@ export default function AdminDashboard() {
             </div>
           </div>
 
-          {/* Right Column: Wiki Approvals */}
           <div className="lg:col-span-1 flex flex-col gap-6">
             <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-[2rem] p-6 shadow-sm">
               

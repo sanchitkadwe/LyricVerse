@@ -113,8 +113,6 @@ export default function Annotate() {
       </div>
     );
   }
-
-  /* ── Error / Not eligible ── */
   if (fetchError || !songData) {
     return (
       <div className="min-h-screen bg-[#fafafa] font-sans flex flex-col">
@@ -131,8 +129,6 @@ export default function Annotate() {
       </div>
     );
   }
-
-  /* ── Submitted success state ── */
   if (submitted) {
     return (
       <div className="min-h-screen bg-[#fafafa] font-sans flex flex-col">
@@ -158,18 +154,13 @@ export default function Annotate() {
     );
   }
 
-  /* ── Main editor ── */
   return (
     <div className="min-h-screen bg-[#fafafa] selection:bg-indigo-100 selection:text-indigo-900 font-sans pb-24 relative flex flex-col">
       <Navbar />
-
-      {/* Blurred background blobs */}
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
         <div className="absolute top-[-10%] right-[-10%] w-[50%] h-[50%] bg-indigo-200 rounded-full mix-blend-multiply filter blur-[120px] opacity-40" />
         <div className="absolute bottom-[20%] left-[-10%] w-[40%] h-[40%] bg-violet-200 rounded-full mix-blend-multiply filter blur-[120px] opacity-30" />
       </div>
-
-      {/* Sticky header */}
       <div className="sticky top-0 z-40 backdrop-blur-xl bg-white/70 border-b border-slate-200/60 py-4 mb-8">
         <div className="max-w-5xl mx-auto px-4 sm:px-6 flex justify-between items-center gap-4">
           <div className="flex items-center gap-4">
@@ -192,23 +183,17 @@ export default function Annotate() {
         </div>
       </div>
 
-      {/* Two-column layout */}
       <div className="relative z-10 max-w-5xl mx-auto px-4 sm:px-6 w-full flex-grow">
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
 
-          {/* Main editor — left column */}
           <div className="lg:col-span-8 flex flex-col gap-6">
-            {/* Instructions banner */}
             <div className="flex items-start gap-3 bg-indigo-50 border border-indigo-100 rounded-2xl px-5 py-4 text-indigo-900">
               <FileText size={18} className="mt-0.5 flex-shrink-0 text-indigo-500" />
               <p className="text-sm font-medium leading-relaxed">
                 The original lyrics are pre-filled below. Edit them however you think they should read, then click <strong>Save Contribution</strong>. The author will review your changes.
               </p>
             </div>
-
-            {/* Lyrics textarea */}
             <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-2xl shadow-sm overflow-hidden flex flex-col flex-grow min-h-[520px]">
-              {/* Editor toolbar */}
               <div className="border-b border-slate-200/60 bg-slate-50/50 px-5 py-3 flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Music size={15} className="text-slate-400" />
@@ -229,9 +214,9 @@ export default function Annotate() {
             </div>
           </div>
 
-          {/* Sidebar — right column */}
+
           <div className="lg:col-span-4 flex flex-col gap-6">
-            {/* Note to author */}
+
             <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-3xl p-6 shadow-sm">
               <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">
                 Note to Author <span className="font-normal text-slate-400">(optional)</span>
@@ -245,7 +230,7 @@ export default function Annotate() {
               />
             </div>
 
-            {/* Song info card */}
+
             <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-3xl p-6 shadow-sm text-sm text-slate-600 space-y-3">
               <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-4">Song Info</p>
               <div className="flex justify-between">
@@ -270,7 +255,6 @@ export default function Annotate() {
               )}
             </div>
 
-            {/* Submit button (also in sidebar for convenience) */}
             <button
               onClick={handleSubmit}
               disabled={submitting || !proposedLyrics.trim()}

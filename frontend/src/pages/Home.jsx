@@ -20,16 +20,12 @@ export default function Home() {
     return (
 
         <div className="min-h-screen bg-[#fafafa] selection:bg-indigo-100 selection:text-indigo-900 font-sans flex flex-col">
-
-            {/* Ambient Background Glow */}
             <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
                 <div className="absolute -top-40 -right-40 w-96 h-96 bg-indigo-200 rounded-full mix-blend-multiply filter blur-3xl opacity-50"></div>
                 <div className="absolute top-40 -left-40 w-96 h-96 bg-purple-200 rounded-full mix-blend-multiply filter blur-3xl opacity-50"></div>
             </div>
 
             <BaseNavbar />
-
-
             {/* Hero Section */}
             <section className="relative z-10 pt-24 pb-32 px-4 sm:px-6 lg:px-8 overflow-hidden">
                 <div className="max-w-7xl mx-auto">
@@ -65,19 +61,14 @@ export default function Home() {
                             <div className="relative w-full aspect-square">
                                 {/* Background decorative card */}
                                 <div className="absolute inset-0 bg-gradient-to-br from-indigo-500 to-violet-500 rounded-[2.5rem] shadow-2xl transform rotate-6 scale-95 opacity-90 transition-transform hover:rotate-12 duration-700"></div>
-
                                 {/* Foreground glass card */}
                                 <div className="absolute inset-0 bg-white/90 backdrop-blur-xl border border-white/50 rounded-[2.5rem] shadow-xl transform -rotate-3 flex flex-col items-center justify-center p-8 transition-transform hover:-rotate-6 duration-700">
-
                                     {/* Floating Elements inside the card */}
                                     <div className="w-20 h-20 bg-indigo-50 rounded-2xl flex items-center justify-center mb-6 shadow-inner">
                                         <Globe2 className="text-indigo-600 w-10 h-10" />
                                     </div>
-
                                     <h3 className="text-2xl font-bold text-slate-900 mb-2">Multilingual Magic</h3>
                                     <p className="text-slate-500 text-center mb-8">Seamlessly translate emotions, not just words.</p>
-
-                                    {/* Mock UI Element */}
                                     <div className="w-full bg-slate-50 rounded-xl p-4 border border-slate-100">
                                         <div className="flex items-center justify-between mb-2">
                                             <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">English</span>
@@ -156,7 +147,7 @@ export default function Home() {
             <footer className="bg-white border-t border-slate-200/60 pt-16 pb-8 mt-auto">
                 <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
 
-                    {/* Main Content - Centered */}
+                    {/* Main Content*/}
                     <div className="flex flex-col items-center text-center mb-12">
 
                         {/* Brand Logo & Name */}

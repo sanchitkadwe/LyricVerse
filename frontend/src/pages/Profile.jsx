@@ -12,11 +12,10 @@ import {
 export default function Profile() {
     const navigate = useNavigate();
 
-    // Modals & Feedback State
+    // Models & Feedback State
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
-    const [saveStatus, setSaveStatus] = useState(''); // Gives feedback when saving
+    const [saveStatus, setSaveStatus] = useState('');
 
-    // Real User Data State (matching your Django Model)
     const [user, setUser] = useState({
         id: null,
         username: '',
@@ -29,14 +28,13 @@ export default function Profile() {
         role:''
     });
 
-    // --- 1. FETCH PROFILE DATA ON LOAD ---
+    // FETCH PROFILE DATA ON LOAD
     useEffect(() => {
         const fetchProfile = async () => {
             try {
                 const profileResponse = await axios.get(BASE_URL + API_ENDPOINTS.PROFILE, {
-                    withCredentials: true // Sends the secure cookies
+                    withCredentials: true
                 });
-                // Populate the state with database values
                 setUser({
                     id: profileResponse.data.id,
                     username: profileResponse.data.username || '',
@@ -50,7 +48,6 @@ export default function Profile() {
                 });
             } catch (error) {
                 console.error("Error fetching profile:", error);
-                // If unauthorized (token expired/missing), kick them to login
                 if (error.response?.status === 401) {
                     navigate('/login');
                 }
@@ -64,7 +61,7 @@ export default function Profile() {
             await axios.post(BASE_URL + API_ENDPOINTS.LOGOUT, {}, {
                 withCredentials: true
             });
-            navigate('/'); // Send back to auth page
+            navigate('/'); // Back to auth page
         } catch (error) {
             console.error("Logout failed", error);
         }
@@ -82,7 +79,7 @@ export default function Profile() {
                 withCredentials: true
             });
             setSaveStatus('Changes saved successfully!');
-            setTimeout(() => setSaveStatus(''), 3000); // Clear message after 3 seconds
+            setTimeout(() => setSaveStatus(''), 3000);
         } catch (error) {
             console.error("Error saving profile:", error);
             setSaveStatus('Failed to save changes.');
@@ -94,12 +91,11 @@ export default function Profile() {
 
     const handleDeleteAccount = async () => {
         try {
-            // Django's ModelViewSet automatically creates a DELETE endpoint at /api/users/<id>/
             await axios.delete(`${BASE_URL}${API_ENDPOINTS.USER}${user.id}/`, {
                 withCredentials: true
             });
             setIsDeleteDialogOpen(false);
-            navigate('/login'); // Redirect to login after deletion
+            navigate('/login'); // Redirect to login
         } catch (error) {
             console.error("Failed to delete account", error);
             alert("Could not delete account. Please try again.");
@@ -133,7 +129,7 @@ export default function Profile() {
                         <h1 className="text-xl font-bold text-slate-900">Account Settings</h1>
                     </div>
                     <button
-                        onClick={handleLogout} // Attached Logout logic here
+                        onClick={handleLogout}
                         className="flex items-center gap-2 px-4 py-2 text-sm font-semibold text-slate-600 hover:text-red-600 hover:bg-red-50 rounded-full transition-all"
                     >
                         <LogOut size={16} />
@@ -178,9 +174,6 @@ export default function Profile() {
                             <button className="flex items-center gap-3 px-4 py-3 bg-indigo-50 text-indigo-700 rounded-xl text-sm font-bold transition-colors">
                                 <User size={18} /> Profile Details
                             </button>
-                            {/* <button className="flex items-center gap-3 px-4 py-3 text-slate-600 hover:bg-slate-50 hover:text-slate-900 rounded-xl text-sm font-medium transition-colors">
-                                <Shield size={18} /> Password & Security
-                            </button> */}
                         </div>
                     </div>
 
@@ -288,7 +281,6 @@ export default function Profile() {
                                             <p className="text-xs text-slate-500">Your primary language for the editor.</p>
                                         </div>
                                     </div>
-                                    {/* Linked Dropdown to Django Database values */}
                                     <select
                                         value={user.preferred_language}
                                         onChange={(e) => setUser({ ...user, preferred_language: e.target.value })}

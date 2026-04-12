@@ -32,11 +32,7 @@ const STATUS_LABELS = {
   rejected:           'Rejected',
 };
 
-/* ──────────────────────────────────────────────
-   Diff utilities
-────────────────────────────────────────────── */
-
-/** Line-by-line LCS diff. Returns [{type, line}] */
+/**Line-by-line LCS diff*/
 function computeLineDiff(original, proposed) {
   const a = (original || '').split('\n');
   const b = (proposed || '').split('\n');
@@ -55,10 +51,7 @@ function computeLineDiff(original, proposed) {
   return result;
 }
 
-/** Group consecutive changed lines into hunks.
- *  Returns { hunks: [{id, lines:[{type,line}]}], equalLines: [{diffIdx, line}] }
- *  Each hunk id is stable (index-based).
- */
+/** Group consecutive changed lines into chunks */
 function groupIntoHunks(diff) {
   const hunks = [];
   let currentHunk = null;
@@ -75,26 +68,22 @@ function groupIntoHunks(diff) {
   return hunks;
 }
 
-/** Merge: for each hunk, apply it if selected (using its custom edited text if provided), else keep original lines. */
+
 function applySelectedHunks(diff, hunks, selectedHunkIds, editedHunks = {}) {
   const selectedSet = new Set(selectedHunkIds);
-  // Map diffIdx → hunk id
   const diffIdxToHunk = new Map();
   hunks.forEach(h => h.lines.forEach(l => diffIdxToHunk.set(l.diffIdx, h.id)));
-
   const result = [];
   const seen = new Set();
-
   diff.forEach((entry, idx) => {
     if (entry.type === 'equal') { result.push(entry.line); return; }
     const hunkId = diffIdxToHunk.get(idx);
-    if (seen.has(`${hunkId}-done`)) return; // already handled
+    if (seen.has(`${hunkId}-done`)) return;
     const hunk = hunks.find(h => h.id === hunkId);
     if (!hunk) return;
     if (!seen.has(`${hunkId}-start`)) {
       seen.add(`${hunkId}-start`);
       if (selectedSet.has(hunkId)) {
-        // Apply: use edited text if available, otherwise use default proposed 'added' lines
         if (editedHunks[hunkId] !== undefined) {
           if (editedHunks[hunkId] !== '') {
             result.push(...editedHunks[hunkId].split('\n'));
@@ -103,7 +92,6 @@ function applySelectedHunks(diff, hunks, selectedHunkIds, editedHunks = {}) {
           hunk.lines.forEach(l => { if (l.type === 'added') result.push(l.line); });
         }
       } else {
-        // Reject: keep removed (original) lines, drop added
         hunk.lines.forEach(l => { if (l.type === 'removed') result.push(l.line); });
       }
       seen.add(`${hunkId}-done`);
@@ -114,10 +102,6 @@ function applySelectedHunks(diff, hunks, selectedHunkIds, editedHunks = {}) {
 }
 
 const CONTEXT = 2;
-
-/* ──────────────────────────────────────────────
-   SelectiveDiffView component
-────────────────────────────────────────────── */
 function SelectiveDiffView({ original, proposed, selectedHunkIds, onToggleHunk }) {
   const diff = useMemo(() => computeLineDiff(original || '', proposed || ''), [original, proposed]);
   const hunks = useMemo(() => groupIntoHunks(diff), [diff]);
@@ -132,8 +116,6 @@ function SelectiveDiffView({ original, proposed, selectedHunkIds, onToggleHunk }
     });
     return visible;
   }, [diff]);
-
-  // Map diffIdx → hunkId for rendering
   const diffIdxToHunk = useMemo(() => {
     const map = new Map();
     hunks.forEach(h => h.lines.forEach(l => map.set(l.diffIdx, h.id)));
@@ -147,7 +129,6 @@ function SelectiveDiffView({ original, proposed, selectedHunkIds, onToggleHunk }
       </p>
     );
   }
-
   const rowStyle = {
     equal:   'bg-transparent text-slate-600',
     removed: 'bg-rose-50 text-rose-800',
@@ -186,7 +167,6 @@ function SelectiveDiffView({ original, proposed, selectedHunkIds, onToggleHunk }
             key={row.key}
             className={`flex items-start gap-2 px-3 py-1 leading-6 ${rowStyle[row.type]} ${isChanged && row.isFirst ? 'border-l-4' : isChanged ? 'border-l-4 border-transparent' : ''} ${row.type === 'removed' && row.isFirst ? 'border-rose-400' : ''} ${row.type === 'added' && row.isFirst ? 'border-emerald-400' : ''} ${isChanged && !row.isFirst ? (row.type === 'removed' ? 'border-l-4 border-rose-200' : 'border-l-4 border-emerald-200') : ''}`}
           >
-            {/* Hunk checkbox — shown only on the first line of each hunk */}
             <div className="w-5 shrink-0 flex items-center justify-center mt-1">
               {isChanged && row.isFirst ? (
                 <input
@@ -211,9 +191,6 @@ function SelectiveDiffView({ original, proposed, selectedHunkIds, onToggleHunk }
   );
 }
 
-/* ──────────────────────────────────────────────
-   AnnotationCard component
-────────────────────────────────────────────── */
 function AnnotationCard({ annotation, song, onRemove, addToast }) {
   const [reviewing, setReviewing] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -223,13 +200,8 @@ function AnnotationCard({ annotation, song, onRemove, addToast }) {
     [song?.original_lyrics, annotation.proposed_lyrics],
   );
   const hunks = useMemo(() => groupIntoHunks(diff), [diff]);
-
-  // All hunks selected by default
   const [selectedHunkIds, setSelectedHunkIds] = useState(() => new Set(hunks.map(h => h.id)));
-  // Custom edited text for each hunk: hunkId -> string
   const [editedHunks, setEditedHunks] = useState({});
-
-  // Keep in sync if hunks change
   useEffect(() => {
     setSelectedHunkIds(new Set(hunks.map(h => h.id)));
     setEditedHunks({});
@@ -245,7 +217,6 @@ function AnnotationCard({ annotation, song, onRemove, addToast }) {
 
   const handleChangeHunkText = useCallback((hunkId, text) => {
     setEditedHunks(prev => ({ ...prev, [hunkId]: text }));
-    // Auto-select if author types in it
     setSelectedHunkIds(prev => {
       if (!prev.has(hunkId)) { const n = new Set(prev); n.add(hunkId); return n; }
       return prev;
@@ -266,7 +237,6 @@ function AnnotationCard({ annotation, song, onRemove, addToast }) {
 
   const handleApply = async () => {
     if (noneSelected) {
-      // Treat as full reject if nothing is selected
       await handleReject();
       return;
     }
@@ -348,7 +318,7 @@ function AnnotationCard({ annotation, song, onRemove, addToast }) {
         </div>
       )}
 
-      {/* Edit Sections per Hunk */}
+      {/* Edit chunk */}
       {isPending && hunks.length > 0 && (
         <div className="mb-6">
           <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -385,7 +355,6 @@ function AnnotationCard({ annotation, song, onRemove, addToast }) {
               
               return (
                 <div key={hunk.id} className={`border rounded-[1rem] overflow-hidden transition-all ${isSelected ? 'border-indigo-200 shadow-sm' : 'border-slate-200 opacity-70'}`}>
-                  {/* Hunk Header */}
                   <div className={`flex items-center gap-2 px-3 py-2 border-b ${isSelected ? 'bg-indigo-50 border-indigo-100' : 'bg-slate-100 border-slate-200'}`}>
                     <input 
                       type="checkbox" 
@@ -396,9 +365,7 @@ function AnnotationCard({ annotation, song, onRemove, addToast }) {
                     <span className={`text-[11px] font-bold uppercase tracking-wider ${isSelected ? 'text-indigo-700' : 'text-slate-500'}`}>
                       Change {idx + 1}
                     </span>
-                  </div>
-                  
-                  {/* Hunk Body: Split original vs editable proposed */}
+                  </div>                  
                   <div className="flex flex-col sm:flex-row divide-y sm:divide-y-0 sm:divide-x divide-slate-100 bg-white">
                     <div className="flex-1 p-3">
                       <p className="text-[10px] font-bold text-rose-500/70 uppercase tracking-widest mb-1.5 flex items-center gap-1">
@@ -432,7 +399,6 @@ function AnnotationCard({ annotation, song, onRemove, addToast }) {
         </div>
       )}
 
-      {/* Read-Only Full Diff (Non-pending) */}
       {!isPending && (
         <div className="mb-4">
           <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Changes (read-only)</p>
@@ -445,7 +411,6 @@ function AnnotationCard({ annotation, song, onRemove, addToast }) {
         </div>
       )}
 
-      {/* Full Preview (Read-only) */}
       {isPending && hunks.length > 0 && (
         <div className="mb-4 bg-white border border-slate-200 rounded-[1rem] overflow-hidden">
           <button
@@ -474,7 +439,6 @@ function AnnotationCard({ annotation, song, onRemove, addToast }) {
         </div>
       )}
 
-      {/* Action buttons */}
       {isPending && (
         <div className="flex flex-wrap gap-3 pt-1">
           <button
@@ -503,8 +467,6 @@ function AnnotationCard({ annotation, song, onRemove, addToast }) {
           </button>
         </div>
       )}
-
-      {/* Reviewed timestamp */}
       {annotation.reviewed_at && (
         <p className="text-xs text-slate-400 mt-3">
           Reviewed on{' '}
@@ -518,9 +480,7 @@ function AnnotationCard({ annotation, song, onRemove, addToast }) {
   );
 }
 
-/* ──────────────────────────────────────────────
-   Main page
-────────────────────────────────────────────── */
+
 export default function ManageAnnotations() {
   const { songId } = useParams();
   const navigate = useNavigate();

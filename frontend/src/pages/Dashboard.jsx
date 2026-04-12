@@ -454,14 +454,6 @@ export default function Dashboard() {
                     )}
                   </div>
                 </div>
-
-                {/* <div className="border-t border-slate-100 pt-4 flex justify-between items-center mt-auto">
-                  <span className="text-xs font-medium text-slate-400">Created {song.date}</span>
-                  <span className="flex items-center gap-1.5 text-xs font-bold text-slate-500">
-                    <TrendingUp size={14} className="text-slate-400" />
-                    {song.rating} rating
-                  </span>
-                </div> */}
               </div>
             ))
           ) : (

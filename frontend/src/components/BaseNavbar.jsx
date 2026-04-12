@@ -8,7 +8,6 @@ export default function BaseNavbar() {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="flex justify-between items-center h-20">
 
-          {/* Left Side: Logo (Clickable to Home) */}
           <Link to="/" className="flex items-center gap-12 group focus:outline-none">
             <div className="flex-shrink-0 flex items-center gap-2 cursor-pointer">
               <div className="bg-gradient-to-br from-indigo-600 to-violet-600 text-white p-2 rounded-xl group-hover:shadow-lg group-hover:shadow-indigo-200 transition-all duration-300">
@@ -20,7 +19,6 @@ export default function BaseNavbar() {
             </div>
           </Link>
 
-          {/* Right Side: Auth Buttons */}
           <div className="flex items-center gap-4">
             <Link
               to="/login"

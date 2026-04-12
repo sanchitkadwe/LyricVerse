@@ -28,8 +28,6 @@ const LANGUAGE_TINT = {
   ta: 'bg-fuchsia-50 text-fuchsia-700 border border-fuchsia-100',
   bn: 'bg-rose-50 text-rose-700 border border-rose-100',
 };
-
-// ── Contribution form component ─────────────────────────────────────────────
 function ContributeForm({ wordId, onSuccess, onCancel }) {
   const [meaning, setMeaning] = useState('');
   const [culturalContext, setCulturalContext] = useState('');
@@ -97,7 +95,6 @@ function ContributeForm({ wordId, onSuccess, onCancel }) {
   );
 }
 
-// ── Single contribution row ──────────────────────────────────────────────────
 function ContributionRow({ contribution, onUpvote }) {
   const [upvotes, setUpvotes] = useState(contribution.upvotes);
   const [voted, setVoted] = useState(false);
@@ -113,9 +110,7 @@ function ContributionRow({ contribution, onUpvote }) {
       setUpvotes(data.upvotes);
       setVoted(true);
       onUpvote?.(contribution.id, data.upvotes);
-    } catch {
-      // silently ignore
-    }
+    } catch {}
   };
 
   return (
@@ -150,18 +145,17 @@ function ContributionRow({ contribution, onUpvote }) {
   );
 }
 
-// ── Word card ────────────────────────────────────────────────────────────────
 function WordCard({ item, onSaveToggle }) {
   const [expanded, setExpanded] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [contributions, setContributions] = useState(null); // null = not loaded yet
+  const [contributions, setContributions] = useState(null);
   const [loadingContributions, setLoadingContributions] = useState(false);
   const [contributionsCount, setContributionsCount] = useState(item.contributions_count ?? 0);
   const [isSaved, setIsSaved] = useState(item.is_saved ?? false);
   const [savingWord, setSavingWord] = useState(false);
 
   const loadContributions = useCallback(async () => {
-    if (contributions !== null) return; // already loaded
+    if (contributions !== null) return;
     setLoadingContributions(true);
     try {
       const { data } = await axios.get(
@@ -201,7 +195,7 @@ function WordCard({ item, onSaveToggle }) {
         onSaveToggle?.(item.id, true);
       }
     } catch {
-      // silently ignore (not logged in, etc.)
+
     } finally {
       setSavingWord(false);
     }
@@ -209,7 +203,6 @@ function WordCard({ item, onSaveToggle }) {
 
   return (
     <div className="bg-white/80 backdrop-blur-md border border-slate-200/60 rounded-[2rem] p-6 sm:p-8 shadow-sm hover:shadow-xl hover:shadow-pink-100/40 hover:border-pink-200/60 transition-all duration-300 flex flex-col group">
-      {/* Header */}
       <div className="flex justify-between items-start mb-4 gap-3">
         <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">{item.word}</h2>
         <div className="flex items-center gap-2 shrink-0">
@@ -294,18 +287,15 @@ function WordCard({ item, onSaveToggle }) {
     </div>
   );
 }
-
-// ── Main page ────────────────────────────────────────────────────────────────
 export default function LyricWiki() {
   const [searchQuery, setSearchQuery] = useState('');
   const [activeLang, setActiveLang] = useState(LANGUAGE_FILTERS[0]?.code || 'en');
-  const [viewMode, setViewMode] = useState('all'); // 'all' | 'saved'
+  const [viewMode, setViewMode] = useState('all');
   const [wikiTerms, setWikiTerms] = useState([]);
   const [savedTerms, setSavedTerms] = useState([]);
   const [loading, setLoading] = useState(true);
   const [loadingSaved, setLoadingSaved] = useState(false);
   const [fetchError, setFetchError] = useState('');
-
   useEffect(() => {
     const fetchWikiData = async () => {
       try {
@@ -345,7 +335,6 @@ export default function LyricWiki() {
     if (!isSaved) {
       setSavedTerms((prev) => prev.filter((t) => t.id !== wordId));
     }
-    // re-fetch saved list next time it's opened
   }, []);
 
   const enrichTerms = useCallback((terms) =>

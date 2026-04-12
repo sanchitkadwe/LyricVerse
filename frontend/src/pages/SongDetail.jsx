@@ -178,20 +178,6 @@ export default function SongDetail() {
       return;
     }
 
-    // Placeholder for future backend TTS integration.
-    // Example:
-    // const response = await fetch(`${BASE_URL}/song/${id}/speech/`, {
-    //   method: 'POST',
-    //   credentials: 'include',
-    //   headers: { 'Content-Type': 'application/json' },
-    //   body: JSON.stringify({
-    //     language: activeLang,
-    //     text: textToRead,
-    //   }),
-    // });
-    // const data = await response.json();
-    // Then play the returned audio URL/blob here.
-
     if (!window.speechSynthesis) {
       return;
     }
